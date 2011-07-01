@@ -1,0 +1,18 @@
+#!/bin/sh
+
+# movetoram: copies the contents of \$rootmnt to a tmpfs volume, then
+# replaces the mounted disk with the tmpfs so that the system will run
+# entirely from RAM
+
+case $1 in
+  prereqs)
+    exit 0 ;;
+esac
+
+mkdir /tmproot
+mount -t tmpfs -o size=500M,mode=0777 tmpfs /tmproot
+cp -r ${rootmnt}/* /tmproot
+umount ${rootmnt}
+mount -o move /tmproot ${rootmnt}
+
+exit 0
