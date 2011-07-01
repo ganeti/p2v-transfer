@@ -1,5 +1,5 @@
 AC_PREREQ(2.59)
-AC_INIT(ganeti-instance-debootstrap, 0.9, ganeti@googlegroups.com)
+AC_INIT(ganeti-p2v-transfer, 0.1, ganeti@googlegroups.com)
 
 AC_CONFIG_AUX_DIR(autotools)
 AC_CONFIG_SRCDIR(configure)
@@ -20,6 +20,6 @@ AC_SUBST(OS_DIR, $os_dir)
 AC_PROG_INSTALL
 AC_PROG_LN_S
 
-AC_CONFIG_FILES([ Makefile ])
+AC_CONFIG_FILES([ Makefile instance-p2v-target/Makefile ])
 
 AC_OUTPUT

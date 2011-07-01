@@ -7,7 +7,7 @@ dist_os_SCRIPTS = create import export rename
 dist_os_DATA = ganeti_api_version variants.list
 os_DATA = common.sh
 
-dist_doc_DATA = COPYING NEWS README
+dist_doc_DATA = ../COPYING ../NEWS ../README
 
 EXTRA_DIST = common.sh.in defaults \
 	examples/hooks/grub \
