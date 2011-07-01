@@ -9,8 +9,16 @@
 /config.status
 /configure
 
-# built scripts
-/common.sh
+/instance-p2v-target/Makefile
+/instance-p2v-target/Makefile.in
+
+# built files
+/instance-p2v-target/common.sh
+/instance-p2v-target/p2v-target.conf
 
 # archives
-/ganeti-instance-debootstrap-*.tar.gz
+/instance-p2v-target/ganeti-instance-p2v-target-*.tar.gz
+
+# extensions
+.*.swp
+*.pyc
