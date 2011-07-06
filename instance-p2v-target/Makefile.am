@@ -1,9 +1,14 @@
 osname=$(subst ganeti-instance-,,$(PACKAGE))
 
-osdir=$(OS_DIR)/$(osname)
-variantsdir=$(DESTDIR)$(sysconfdir)/ganeti/instance-debootstrap/variants
+osdir=$(DESTDIR)$(OS_DIR)/$(osname)
+configdir=$(DESTDIR)$(sysconfdir)/ganeti/instance-$(osname)
+variantsdir=$(configdir)/variants
+hookdir=$(configdir)/hooks
 
 dist_os_SCRIPTS = create import export rename
+config_DATA = p2v-target.conf
+dist_hook_SCRIPTS = hooks/ramboot hooks/interfaces hooks/xen-hvc0 \
+		    hooks/clear-root-password
 dist_os_DATA = ganeti_api_version variants.list
 os_DATA = common.sh
 
@@ -11,7 +16,7 @@ dist_sbin_SCRIPTS = scripts/make_ramboot_initrd.py
 
 dist_doc_DATA = ../COPYING ../NEWS ../README
 
-EXTRA_DIST = common.sh.in defaults \
+EXTRA_DIST = common.sh.in p2v-target.conf.in \
 	examples/hooks/grub \
 	examples/hooks/interfaces \
 	$(dist_TESTS) \
@@ -31,11 +36,15 @@ test_extras = \
 
 do_subst = sed \
 	-e 's,[@]sysconfdir[@],$(sysconfdir),g' \
-	-e 's,[@]localstatedir[@],$(localstatedir),g'
+	-e 's,[@]localstatedir[@],$(localstatedir),g' \
+	-e 's,[@]configdir[@],$(configdir),g'
 
 common.sh: common.sh.in Makefile
 	$(do_subst) < $< > $@
 	chmod +x $@
+
+p2v-target.conf: p2v-target.conf.in Makefile
+	$(do_subst) < $< > $@
 
 install-exec-local:
 	@mkdir_p@ $(variantsdir)

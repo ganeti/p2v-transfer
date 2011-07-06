@@ -1,4 +1,4 @@
-# ganeti-instance-debootstrap defaults file
+# ganeti-instance-p2v-target defaults file
 
 # if you want to change from the default of installing debian stable
 # on the next instance, customize this file before the instance
