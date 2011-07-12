@@ -106,20 +106,24 @@ Transfer Process
 
 To maintain the integrity of the copy, the source machine must not be
 running when the transfer is taking place. So, the source machine will
-be booted from a liveCD/PXE image, and the transfer script run from
-that operating system.
+be booted from a liveCD/PXE image, which we will call the **transfer
+OS**, which runs the script to transfer the operating system.
 
-Target instances will be created by the administrator with a bootstrap
-OS, which unmounts the disk after booting and awaits a connection by
+Target instances will be created by the administrator with a **bootstrap
+OS**, which unmounts the disk after booting and awaits a connection by
 the script running on the source machine. Then the disk can be
 partitioned, data copied over rsync, necessary changes made to the
 filesystem. Then the instance is rebooted into the new operating
-system.
+system. The data transfer process is shown in the figure below.
+
+.. image:: organization.svg
+   :width: 500 px
+   :height: 500 px
 
 The migration has the following steps:
 
-1. The target instance is created with a modified OS template
-   (containing tools required for imaging)
+1. The target instance is created with the bootstrap OS template
+   (containing tools required for imaging).
 2. The instance is booted with a modified initrd, which copies the
    root filesystem into RAM before running init. This allows the OS to
    run without the disk being mounted. The command looks something
@@ -127,24 +131,21 @@ The migration has the following steps:
 
      gnt-instance start -H initrd_path=/boot/initrd.img-p2v instance17
 
-3. The instance tries to fetch an SSH public key from a predetermined
-   location.  When it finds one, it downloads it to its
-   /root/.ssh/authorized_keys file, giving the source machine shell
-   access to the target.
+3. The user boots the source machine from a liveCD or PXE image of the
+   transfer OS, and runs the p2v-transfer script, providing the IP
+   address of the target instance and whatever credentials are needed to
+   establish an SSH connection to the bootstrap OS.
 4. The instance disks are partitioned and formatted as required to
-   duplicate the source machine. In the case where the target disks
-   are not the same size as the source ones this requires some
-   cleverness (or user input, more likely) to ensure that the
-   important filesystems (e.g. /usr) have some wiggle room.
-5. The newly created filesystems are mounted on the target. Data is
-   copied from the source to the target.
-6. Modifications are made to the target so that it works in
-   ganeti. Some of these modifications may be extremely os-specific,
-   so they probably shouldn’t be hard-coded into the p2v script, but
-   there isn’t currently a hook in the OS API for this
-   operation. However, the instance is still running (from RAM) at
-   this point, so there may be other options. See “Unresolved
-   Questions,” below.
+   duplicate the source machine. In the case where the target disks are
+   not the same size as the source ones this requires some cleverness
+   (or user input, more likely) to ensure that the important filesystems
+   (e.g. /usr) have some wiggle room.
+5. The newly created filesystems are mounted in the bootstrap OS. Data is
+   copied from the source filesystem to the target filesystem.
+6. Modifications are made to the target filesystem so that it will work
+   correctly as a ganeti instance. Some of these may be OS-specific, so
+   the script should be able to recognize (or select) an OS and perform
+   the appropriate actions, at least for popular Linux versions.
 7. Power the instance off, so ganeti-watcher will restart it using the
    default kernel and initrd. Or, potentially, using pvgrub to use the
    kernel that’s on the transferred image, depending on the setup of
