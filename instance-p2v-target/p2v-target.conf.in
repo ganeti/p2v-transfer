@@ -22,7 +22,7 @@
 
 # SUITE: change suite to any of the ones supported by deboostrap; this
 # could be unstable, etch, etc.:
-# SUITE="lenny"
+# SUITE="squeeze"
 
 # EXTRA_PKGS: depending on the suite and architecture you are using, different
 # extra packages are needed for different hypervisors. For example:
@@ -35,12 +35,13 @@
 # EXTRA_PKGS="acpi-support-base,console-tools,udev,linux-image-686"
 # KVM, for lenny amd64:
 # EXTRA_PKGS="acpi-support-base,console-tools,udev,linux-image-amd64"
-#
+
+# Additional packages required for p2v-target image
+EXTRA_PKGS+=",rsync,openssh-server"
 
 # CUSTOMIZE_DIR: a directory containing scripts to customize the installation.
 # The scripts are executed using run-parts
-# By default /etc/ganeti/instance-debootstrap/hooks
-# CUSTOMIZE_DIR="/etc/ganeti/instance-debootstrap/hooks"
+# CUSTOMIZE_DIR="@configdir@/hooks"
 
 # GENERATE_CACHE: if set to yes (the default), create new cache files;
 # any other value will disable the generation of cache files (but they
