@@ -1,7 +1,8 @@
 # gitignore rules
 # autotools results
-/Makefile
-/Makefile.in
+Makefile
+Makefile.in
+
 /aclocal.m4
 /autom4te.cache
 /autotools
@@ -9,15 +10,12 @@
 /config.status
 /configure
 
-/instance-p2v-target/Makefile
-/instance-p2v-target/Makefile.in
-
 # built files
 /instance-p2v-target/common.sh
 /instance-p2v-target/p2v-target.conf
 
 # archives
-/instance-p2v-target/ganeti-instance-p2v-target-*.tar.gz
+/ganeti-p2v-transfer-*.tar.gz
 
 # extensions
 .*.swp

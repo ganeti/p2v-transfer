@@ -20,6 +20,11 @@ AC_SUBST(OS_DIR, $os_dir)
 AC_PROG_INSTALL
 AC_PROG_LN_S
 
-AC_CONFIG_FILES([ Makefile instance-p2v-target/Makefile ])
+AC_PATH_PROG([RST2HTML], [rst2html])
+
+AC_CONFIG_FILES([ Makefile
+        instance-p2v-target/Makefile
+        p2v-transfer/Makefile
+        doc/Makefile ])
 
 AC_OUTPUT

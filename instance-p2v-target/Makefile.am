@@ -1,4 +1,4 @@
-osname=$(subst ganeti-instance-,,$(PACKAGE))
+osname=p2v-target
 
 osdir=$(DESTDIR)$(OS_DIR)/$(osname)
 configdir=$(DESTDIR)$(sysconfdir)/ganeti/instance-$(osname)
@@ -14,11 +14,7 @@ os_DATA = common.sh
 
 dist_sbin_SCRIPTS = scripts/make_ramboot_initrd.py
 
-dist_doc_DATA = ../COPYING ../NEWS ../README
-
 EXTRA_DIST = common.sh.in p2v-target.conf.in \
-	examples/hooks/grub \
-	examples/hooks/interfaces \
 	$(dist_TESTS) \
 	$(test_extras)
 
@@ -61,4 +57,4 @@ install-exec-hook:
 	@echo *****************************************************************
 	@echo
 
-CLEANFILES = common.sh
+CLEANFILES = common.sh p2v-target.conf
