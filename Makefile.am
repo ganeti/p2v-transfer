@@ -42,9 +42,7 @@ install-doc: doc
 
 check:
 	list='$(parts)'; for dir in $$list; do \
-	    $(MAKE) -C $$dir check; \
+	    $(MAKE) -C $$dir check || exit 1; \
 	done
 
 DIST_SUBDIRS = $(parts)
-
-dist_doc_DATA = COPYING NEWS README
