@@ -1,12 +1,13 @@
 docrst = \
+	../README.rst
 	design.rst
+	README.debootstrap.rst
 
 dochtml = $(docrst:.rst=.html)
 
 docstatic = \
 	../COPYING \
-	../NEWS \
-	../README
+	../NEWS
 
 if RST2HTML
   nodist_doc_DATA = $(dochtml)
