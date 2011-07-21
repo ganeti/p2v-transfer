@@ -3,12 +3,17 @@ docrst = \
 
 dochtml = $(docrst:.rst=.html)
 
-nodist_doc_DATA = $(dochtml)
+if RST2HTML
+  nodist_doc_DATA = $(dochtml)
+endif
+
 dist_doc_DATA = $(docrst)
 
 %.html: %.rst
-	@test -n "$(RST2HTML)" || \
-	    { echo 'rst2html' not found, docs will not be built; exit 1; }
-	$(RST2HTML) $< > $@
+	@if test -n "$(RST2HTML)"; then\
+	    $(RST2HTML) $< > $@;\
+	else\
+	    echo "'rst2html' not found, docs will not be built";\
+	fi
 
 CLEANFILES = $(dochtml)

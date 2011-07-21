@@ -21,6 +21,7 @@ AC_PROG_INSTALL
 AC_PROG_LN_S
 
 AC_PATH_PROG([RST2HTML], [rst2html])
+AM_CONDITIONAL([RST2HTML], [test -n "$RST2HTML"])
 
 AC_CONFIG_FILES([ Makefile
         instance-p2v-target/Makefile
