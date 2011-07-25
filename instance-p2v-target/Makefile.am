@@ -11,8 +11,9 @@ dist_os_SCRIPTS = create import export rename
 config_DATA = p2v-target.conf
 dist_hook_SCRIPTS = hooks/ramboot hooks/interfaces hooks/xen-hvc0 \
 		    hooks/clear-root-password
+hook_SCRIPTS = hooks/install-fixes
 
-subst_files = common.sh p2v-target.conf
+subst_files = hooks/install-fixes common.sh p2v-target.conf
 
 dist_os_DATA = ganeti_api_version variants.list
 os_SCRIPTS = common.sh
@@ -20,7 +21,8 @@ os_SCRIPTS = common.sh
 dist_sbin_SCRIPTS = scripts/make_ramboot_initrd.py
 dist_fixes_SCRIPTS =
 
-dist_fixlib_DATA =
+dist_fixlib_DATA = \
+	fixes/fixlib/__init__.py
 
 EXTRA_DIST = $(patsubst %,%.in,$(subst_files)) \
 	$(dist_TESTS) \
