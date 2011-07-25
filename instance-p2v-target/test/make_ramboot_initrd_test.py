@@ -17,7 +17,7 @@
 # Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 # 02110-1301, USA.
 
-"""Tests for scripts.make_ramboot_initrd."""
+"""Tests for make_ramboot_initrd."""
 
 import os
 import platform
@@ -26,7 +26,7 @@ import tempfile
 import unittest
 import mox
 
-import scripts.make_ramboot_initrd as mkinitrd
+import make_ramboot_initrd as mkinitrd
 
 class MakeRambootInitrdTest(unittest.TestCase):
   SRCDIR = os.environ.get("SRCDIR", ".")

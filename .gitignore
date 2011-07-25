@@ -13,6 +13,10 @@ Makefile.in
 # built files
 /instance-p2v-target/common.sh
 /instance-p2v-target/p2v-target.conf
+/instance-p2v-target/hooks/install-fixes
+
+/README.html
+/doc/*.html
 
 # archives
 /ganeti-p2v-transfer-*.tar.gz

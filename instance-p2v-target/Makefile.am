@@ -4,17 +4,25 @@ osdir=$(DESTDIR)$(OS_DIR)/$(osname)
 configdir=$(DESTDIR)$(sysconfdir)/ganeti/instance-$(osname)
 variantsdir=$(configdir)/variants
 hookdir=$(configdir)/hooks
+fixesdir=$(configdir)/fixes
+fixlibdir=$(fixesdir)/fixlib
 
 dist_os_SCRIPTS = create import export rename
 config_DATA = p2v-target.conf
 dist_hook_SCRIPTS = hooks/ramboot hooks/interfaces hooks/xen-hvc0 \
 		    hooks/clear-root-password
+
+subst_files = common.sh p2v-target.conf
+
 dist_os_DATA = ganeti_api_version variants.list
-os_DATA = common.sh
+os_SCRIPTS = common.sh
 
 dist_sbin_SCRIPTS = scripts/make_ramboot_initrd.py
+dist_fixes_SCRIPTS =
 
-EXTRA_DIST = common.sh.in p2v-target.conf.in \
+dist_fixlib_DATA =
+
+EXTRA_DIST = $(patsubst %,%.in,$(subst_files)) \
 	$(dist_TESTS) \
 	$(test_extras)
 
@@ -25,9 +33,8 @@ dist_TESTS = \
 	test/make_ramboot_initrd_test.py
 TESTS = $(dist_TESTS)
 TESTS_ENVIRONMENT = \
-	PYTHONPATH=$(srcdir) SRCDIR=$(srcdir)
+	PYTHONPATH=$(srcdir)/scripts:$(srcdir)/fixes SRCDIR=$(srcdir)
 test_extras = \
-	scripts/__init__.py \
 	test/testdata/movetoram
 
 do_subst = sed \
@@ -35,11 +42,8 @@ do_subst = sed \
 	-e 's,[@]localstatedir[@],$(localstatedir),g' \
 	-e 's,[@]configdir[@],$(configdir),g'
 
-common.sh: common.sh.in Makefile
-	$(do_subst) < $< > $@
-	chmod +x $@
-
-p2v-target.conf: p2v-target.conf.in Makefile
+$(subst_files):%: %.in Makefile
+	@mkdir_p@ `dirname $@`
 	$(do_subst) < $< > $@
 
 install-exec-local:
@@ -57,4 +61,4 @@ install-exec-hook:
 	@echo *****************************************************************
 	@echo
 
-CLEANFILES = common.sh p2v-target.conf
+CLEANFILES = $(subst_files)
