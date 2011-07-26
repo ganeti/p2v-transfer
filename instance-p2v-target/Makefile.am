@@ -20,7 +20,8 @@ os_SCRIPTS = common.sh
 
 dist_sbin_SCRIPTS = scripts/make_ramboot_initrd.py
 dist_fixes_SCRIPTS = \
-	fixes/10_fix_fstab
+	fixes/10_fix_fstab \
+	fixes/20_remove_persistent_rules
 
 dist_fixlib_DATA = \
 	fixes/fixlib/fix_fstab.py \
