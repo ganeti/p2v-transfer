@@ -51,6 +51,7 @@ class FixFstabTest(unittest.TestCase):
     desired_data = desired.read()
     out.close()
     desired.close()
+    os.remove(fname_out)
 
     self.assertEqual(desired_data, out_data)
 
@@ -74,10 +75,13 @@ class FixFstabTest(unittest.TestCase):
     handle_out, fname_out = tempfile.mkstemp()
     os.close(handle_out)
 
-    self.assertRaises(fix_fstab.fixlib.FixError, fix_fstab.FixFstab,
-                      fname_in, fname_out)
+    try:
+      self.assertRaises(fix_fstab.fixlib.FixError, fix_fstab.FixFstab,
+                        fname_in, fname_out)
 
-    self.mox.VerifyAll()
+      self.mox.VerifyAll()
+    finally:
+      os.remove(fname_out)
 
 
 if __name__ == '__main__':
