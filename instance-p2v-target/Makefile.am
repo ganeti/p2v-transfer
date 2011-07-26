@@ -19,9 +19,11 @@ dist_os_DATA = ganeti_api_version variants.list
 os_SCRIPTS = common.sh
 
 dist_sbin_SCRIPTS = scripts/make_ramboot_initrd.py
-dist_fixes_SCRIPTS =
+dist_fixes_SCRIPTS = \
+	fixes/10_fix_fstab
 
 dist_fixlib_DATA = \
+	fixes/fixlib/fix_fstab.py \
 	fixes/fixlib/__init__.py
 
 EXTRA_DIST = $(patsubst %,%.in,$(subst_files)) \
@@ -32,11 +34,14 @@ EXTRA_DIST = $(patsubst %,%.in,$(subst_files)) \
 abs_top_srcdir = @abs_top_srcdir@
 srcdir = $(abs_top_srcdir)/instance-p2v-target
 dist_TESTS = \
-	test/make_ramboot_initrd_test.py
+	test/make_ramboot_initrd_test.py \
+	test/fix_fstab_test.py
 TESTS = $(dist_TESTS)
 TESTS_ENVIRONMENT = \
 	PYTHONPATH=$(srcdir)/scripts:$(srcdir)/fixes SRCDIR=$(srcdir)
 test_extras = \
+	test/testdata/fstab_uuid_in \
+	test/testdata/fstab_uuid_out \
 	test/testdata/movetoram
 
 do_subst = sed \
