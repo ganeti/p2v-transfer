@@ -74,14 +74,12 @@ class P2vtransferTest(unittest.TestCase):
     return stdout
 
   def _MockSubprocessCallSuccess(self, command_list):
-    self.mox.StubOutWithMock(self.module.subprocess, "check_call")
-    self.module.subprocess.check_call(command_list).AndReturn(0)
+    self.mox.StubOutWithMock(self.module.subprocess, "call")
+    self.module.subprocess.call(command_list).AndReturn(0)
 
   def _MockSubprocessCallFailure(self, command_list):
-    subprocess = self.module.subprocess
-    self.mox.StubOutWithMock(subprocess, "check_call")
-    call = subprocess.check_call(command_list)
-    call.AndRaise(subprocess.CalledProcessError(1, " ".join(command_list)))
+    self.mox.StubOutWithMock(self.module.subprocess, "call")
+    self.module.subprocess.call(command_list).AndReturn(1)
 
   def _StubOutAllModuleFunctions(self):
     self.module_functions = [

@@ -75,11 +75,14 @@ class MakeRambootInitrdTest(unittest.TestCase):
     # Ensure that only the user running the script can see into the directory
     # from which the initrd is being built
 
+    # No one but the user should see into the temp dir
     tdmode = os.stat(self.temp_dir).st_mode & 0777
     self.assertEqual(0700, tdmode)
 
-    ncdmode = os.stat(self.new_conf_dir).st_mode & 0777
-    self.assertEqual(0755, ncdmode)
+    # The user must be able to access the subdirectory, but it doesn't matter
+    # if others can as they can't get into the parent directory
+    ncdmode = os.stat(self.new_conf_dir).st_mode & 0700
+    self.assertEqual(0700, ncdmode)
 
     filename = os.path.join(self.new_conf_dir, self.test_filename)
     filemode = os.stat(filename).st_mode & 0777
@@ -192,9 +195,10 @@ class MakeRambootInitrdTest(unittest.TestCase):
     self.mox.ReplayAll()
 
     try:
-      mkinitrd.BuildInitrd(test_tmp, test_conf, test_name, test_version)
-    except mkinitrd.Error:
-      self.fail()
+      try:
+        mkinitrd.BuildInitrd(test_tmp, test_conf, test_name, test_version)
+      except mkinitrd.Error:
+        self.fail()
     finally:
       self.mox.VerifyAll()
 

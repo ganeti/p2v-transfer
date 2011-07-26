@@ -254,32 +254,33 @@ def main(argv):
   dest_filename = os.path.join(install_dir, file_name)
 
   try:
-    # Catch some errors early
-    if not os.access(install_dir, os.W_OK):
-      raise Error("Can not write to boot directory. Not generating initrd.")
-    if os.path.exists(dest_filename) and not options.overwrite:
-      raise Error("A file named %s already exists in the directory %s."
-                  " If you wish to overwrite it, please pass the -f option" %
-                  (file_name, install_dir))
+    try:
+      # Catch some errors early
+      if not os.access(install_dir, os.W_OK):
+        raise Error("Can not write to boot directory. Not generating initrd.")
+      if os.path.exists(dest_filename) and not options.overwrite:
+        raise Error("A file named %s already exists in the directory %s."
+                    " If you wish to overwrite it, please pass the -f option" %
+                    (file_name, install_dir))
 
-    if verbose:
-      print "Configuring..."
-    temp_dir, new_conf_dir = CreateTempDir(conf_dir)
-    if verbose:
-      print "Adding script..."
-    AddScript(new_conf_dir)
+      if verbose:
+        print "Configuring..."
+      temp_dir, new_conf_dir = CreateTempDir(conf_dir)
+      if verbose:
+        print "Adding script..."
+      AddScript(new_conf_dir)
 
-    if verbose:
-      print "Building..."
-    temp_out = BuildInitrd(temp_dir, new_conf_dir, file_name, version)
+      if verbose:
+        print "Building..."
+      temp_out = BuildInitrd(temp_dir, new_conf_dir, file_name, version)
 
-    if verbose:
-      print "Installing..."
-    InstallInitrd(temp_out, install_dir, file_name, options.overwrite)
+      if verbose:
+        print "Installing..."
+      InstallInitrd(temp_out, install_dir, file_name, options.overwrite)
 
-  except Error, e:
-    print e
-    sys.exit(1)
+    except Error, e:
+      print e
+      sys.exit(1)
   finally:
     if verbose:
       print "Cleaning up..."

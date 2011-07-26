@@ -142,10 +142,9 @@ def MountSourceFilesystems(root_dev):
   """
   if not os.path.isdir(SOURCE_MOUNT):
     os.mkdir(SOURCE_MOUNT)
-  try:
-    subprocess.check_call(["mount", root_dev, SOURCE_MOUNT])
+  errcode = subprocess.call(["mount", root_dev, SOURCE_MOUNT])
     # TODO(benlipton): mount other filesystems, if any
-  except (subprocess.CalledProcessError, OSError):
+  if errcode:
     print "Error mounting %s" % root_dev
     sys.exit(1)
 
@@ -244,11 +243,10 @@ def TransferFiles(user, host, keyfile):
   @param host: Hostname of instance to connect to.
 
   """
-  try:
-    subprocess.check_call(["rsync", "-aHAXz", "-e", "ssh -i %s" % keyfile,
-                           "%s/" % SOURCE_MOUNT,
-                           "%s@%s:%s" % (user, host, TARGET_MOUNT)])
-  except subprocess.CalledProcessError:
+  errcode = subprocess.call(["rsync", "-aHAXz", "-e", "ssh -i %s" % keyfile,
+                             "%s/" % SOURCE_MOUNT,
+                             "%s@%s:%s" % (user, host, TARGET_MOUNT)])
+  if errcode:
     print "Error using rsync to transfer files"
     sys.exit(1)
 
@@ -276,9 +274,8 @@ def UnmountSourceFilesystems():
   filesystem.
 
   """
-  try:
-    subprocess.check_call(["umount", SOURCE_MOUNT])
-  except (subprocess.CalledProcessError, OSError):
+  errcode = subprocess.call(["umount", SOURCE_MOUNT])
+  if errcode:
     print "Error unmounting %s" % SOURCE_MOUNT
     sys.exit(1)
 
@@ -290,22 +287,23 @@ def main(argv):
   root_dev, host, keyfile = args
 
   try:
-    uid = os.getuid()
-    if uid != 0:
-      raise P2VError("Must be run as root")
-    key = LoadSSHKey(keyfile)
-    client = EstablishConnection(user, host, key)
-    MountSourceFilesystems(root_dev)
-    if VerifyKernelMatches(client):
-      PartitionTargetDisks(client, 10)
-      TransferFiles(user, host, keyfile)
-      RunFixScripts(client)
-      ShutDownTarget(client)
-    else:
-      raise P2VError("Instance kernel not present on source OS")
-  except P2VError, e:
-    print e
-    sys.exit(1)
+    try:
+      uid = os.getuid()
+      if uid != 0:
+        raise P2VError("Must be run as root")
+      key = LoadSSHKey(keyfile)
+      client = EstablishConnection(user, host, key)
+      MountSourceFilesystems(root_dev)
+      if VerifyKernelMatches(client):
+        PartitionTargetDisks(client, 10)
+        TransferFiles(user, host, keyfile)
+        RunFixScripts(client)
+        ShutDownTarget(client)
+      else:
+        raise P2VError("Instance kernel not present on source OS")
+    except P2VError, e:
+      print e
+      sys.exit(1)
   finally:
     if uid == 0:
       UnmountSourceFilesystems()
