@@ -103,9 +103,9 @@ transfer. Generate the keys, with no passphrase, using the command::
 
   ssh-keygen -t dsa -N ""
 
-Place the public key in ``/etc/ganeti/instance-p2v/id_dsa.pub`` and copy
-it to all nodes. Keep the private key somewhere safe, and give it to
-users who wish to use the P2V system.
+Place the public key in ``/etc/ganeti/instance-p2v-target/id_dsa.pub``
+and copy it to all nodes. Keep the private key somewhere safe, and give
+it to users who wish to use the P2V system.
 
 
 Creating a Target Instance

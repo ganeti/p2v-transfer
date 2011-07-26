@@ -17,4 +17,15 @@ fi
 mkdir -p "$TARGET/usr/lib/ganeti"
 cp -r "@configdir@/fixes" "$TARGET/usr/lib/ganeti"
 
+# Copy the public key from @configdir@/id_dsa.pub to the instance:
+if [ ! -f "@configdir@/id_dsa.pub" ]; then
+    echo "No public key found, you will not be able to log into the instance."
+    echo "Please generate a dsa keypair and place the public key in"
+    echo "@configdir@/id_dsa.pub"
+    exit 1
+fi
+
+mkdir -p "$TARGET/root/.ssh"
+cp "@configdir@/id_dsa.pub" "$TARGET/root/.ssh/authorized_keys"
+
 exit 0
