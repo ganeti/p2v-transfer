@@ -18,4 +18,3 @@ mkdir -p "$TARGET/usr/lib/ganeti"
 cp -r "@configdir@/fixes" "$TARGET/usr/lib/ganeti"
 
 exit 0
-
