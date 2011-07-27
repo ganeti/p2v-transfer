@@ -261,9 +261,7 @@ def RunFixScripts(client):
   @param client: SSH client object used to connect to the instance.
 
   """
-  #commands = fix_scripts.GetCommandsForOS("debian")
-  #commands.run(client)
-  _RunCommandAndWait(client, "/usr/lib/ganeti/fixes/run_fixes.py")
+  _RunCommandAndWait(client, "run-parts /usr/lib/ganeti/fixes")
 
 
 def UnmountSourceFilesystems():

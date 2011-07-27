@@ -207,7 +207,7 @@ EOF
 
   def testRunFixScriptsReportsFailure(self):
     # Run the command, but have it exit with error
-    self._MockRunCommandAndWait("/usr/lib/ganeti/fixes/run_fixes.py", 1)
+    self._MockRunCommandAndWait("run-parts /usr/lib/ganeti/fixes", 1)
 
     self.mox.ReplayAll()
     self.assertRaises(self.module.P2VError,
