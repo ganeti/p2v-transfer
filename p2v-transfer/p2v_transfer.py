@@ -191,7 +191,43 @@ def _WaitForCompletion(channel):
     time.sleep(.01)
 
 
-def PartitionTargetDisks(client, swap_cyls):
+def GetDiskSize(client):
+  """Determine how much disk is available, how much swap space to include.
+
+  For swap size, returns the minimum of:
+  - amount of swap space on the source machine
+  - 10% of the target drive
+
+  @type client: paramiko.SSHClient
+  @param client: SSH client object used to connect to the instance.
+  @rtype: (int, int)
+  @return: Total size in megabytes, swap size in megabytes
+
+  """
+   # Find out how many MB are available on target
+  stdin, stdout, stderr = client.exec_command("blockdev --getsize64 /dev/xvda")
+  for line in stdout:
+    if line.strip():
+      total_megs = int(line.strip()) / (1024 * 1024)
+      break
+  stdout.close()
+
+  swap_output = subprocess.Popen(["swapon", "-s"],
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE).communicate()[0]
+  swap_megs = 0
+  for line in swap_output.splitlines()[1:]:
+    words = line.split()
+    try:
+      size_kb = int(words[2])
+      swap_megs += size_kb / 1024
+    except ValueError:
+      pass  # This line doesn't have data on it
+
+  return total_megs, min(swap_megs, int(total_megs * 0.1))
+
+
+def PartitionTargetDisks(client, total_megs, swap_megs):
   """Partition and format the disks on the target machine.
 
   Sends commands over the SSH connection to partition and format the
@@ -199,26 +235,18 @@ def PartitionTargetDisks(client, swap_cyls):
 
   @type client: paramiko.SSHClient
   @param client: SSH client object used to connect to the instance.
-  @type swap_cyls: int
-  @param swap_cyls: Desired size of swap space, in cylinders
+  @type total_megs: int
+  @param total_megs: Total size of disk, in megabytes
+  @type swap_megs: int
+  @param swap_megs: Desired size of swap space, in megabytes
 
   """
-  # Find out how many cylinders are available on target
-  total_cyls = 0
-  stdin, stdout, stderr = client.exec_command("sfdisk -l /dev/xvda")
-  for line in stdout:
-    if line.startswith("Disk /dev/xvda:"):
-      words = line.split()
-      total_cyls = int(words[2])
-      break
-  stdout.close()
-
-  nonswap_cyls = total_cyls - swap_cyls
-  sfdisk_command = """sfdisk /dev/xvda <<EOF
+  nonswap_megs = total_megs - swap_megs
+  sfdisk_command = """sfdisk -uM /dev/xvda <<EOF
 0,%d,83
 ,,82
 EOF
-""" % nonswap_cyls
+""" % nonswap_megs
 
   _RunCommandAndWait(client, sfdisk_command)
 
@@ -230,6 +258,7 @@ EOF
     ]
 
   _RunCommandAndWait(client, " && ".join(other_commands))
+
 
 def TransferFiles(user, host, keyfile):
   """Transfer files to the bootstrap OS.
@@ -293,7 +322,8 @@ def main(argv):
       client = EstablishConnection(user, host, key)
       MountSourceFilesystems(root_dev)
       if VerifyKernelMatches(client):
-        PartitionTargetDisks(client, 10)
+        total_megs, swap_megs = GetDiskSize(client)
+        PartitionTargetDisks(client, total_megs, swap_megs)
         TransferFiles(user, host, keyfile)
         RunFixScripts(client)
         ShutDownTarget(client)

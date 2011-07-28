@@ -61,6 +61,8 @@ class P2vtransferTest(unittest.TestCase):
       self.host,
       self.pkeyfile,
       ]
+    self.swapsize = 1024
+    self.totsize = 102400
 
   def _MockRunCommandAndWait(self, command, exit_status=0):
     stdin = _MockChannelFile(self.mox)
@@ -84,6 +86,7 @@ class P2vtransferTest(unittest.TestCase):
   def _StubOutAllModuleFunctions(self):
     self.module_functions = [
       "EstablishConnection",
+      "GetDiskSize",
       "PartitionTargetDisks",
       "MountSourceFilesystems",
       "TransferFiles",
@@ -106,22 +109,91 @@ class P2vtransferTest(unittest.TestCase):
     self.module.ShutDownTarget(self.client)
     self.mox.VerifyAll()
 
-  def testPartitionTargetDisksSendsCommands(self):
-    swap_cyls = 10
-    tot_cyls = 600
+  def testGetDiskSizeHandlesLargeDisk(self):
+    """On large disks, swap size should be the same as the source.
 
-    sfdisk_output = "Disk /dev/xvda: %d cylinders, 255 heads, etc." % tot_cyls
+    uses self.totsize and self.swapsize to generate command outputs such that
+    the returned values will be approximately self.totsize and self.swapsize.
+    """
+    popen = self.mox.CreateMock(self.module.subprocess.Popen)
+    self.mox.StubOutWithMock(self.module.subprocess, 'Popen',
+                             use_mock_anything=True)
+
+    tot_bytes = self.totsize * 1024 * 1024
+    swap_kb = self.swapsize * 1024
+
+    blockdev_output = str(tot_bytes)
+    swapon_output = """
+Filename			Type		Size	Used	Priority
+/dev/sda5                       partition	%d	0	-1
+""" % swap_kb
+
     stdout = _MockChannelFile(self.mox)
-    stdout._SetOutput(sfdisk_output)
+    stdout._SetOutput(blockdev_output)
 
-    self.client.exec_command("sfdisk -l /dev/xvda").AndReturn((None, stdout,
-                                                               None))
+    call = self.client.exec_command("blockdev --getsize64 /dev/xvda")
+    call.AndReturn((None, stdout, None))
 
-    sfdisk_command = """sfdisk /dev/xvda <<EOF
+    call = self.module.subprocess.Popen(["swapon", "-s"],
+                                        stdout=self.module.subprocess.PIPE,
+                                        stderr=self.module.subprocess.PIPE)
+    call.AndReturn(popen)
+    popen.communicate().AndReturn((swapon_output, None))
+
+    self.mox.ReplayAll()
+    total, swap = self.module.GetDiskSize(self.client)
+    self.assertEqual(total, self.totsize)
+    # Should return same swap size as source machine
+    self.assertEqual(swap, self.swapsize)
+    self.mox.VerifyAll()
+
+  def testGetDiskSizeHandlesSmallDisk(self):
+    """On small disks, swap size should be 10% of the disk.
+
+    Makes self.totsize small, so that the returned swap size will be smaller
+    than self.swapsize.
+    """
+    self.totsize = self.swapsize * 5
+
+    popen = self.mox.CreateMock(self.module.subprocess.Popen)
+    self.mox.StubOutWithMock(self.module.subprocess, 'Popen',
+                             use_mock_anything=True)
+
+    tot_bytes = self.totsize * 1024 * 1024
+    swap_kb = self.swapsize * 1024
+
+    blockdev_output = str(tot_bytes)
+    swapon_output = """
+Filename			Type		Size	Used	Priority
+/dev/sda5                       partition	%d	0	-1
+""" % swap_kb
+
+    stdout = _MockChannelFile(self.mox)
+    stdout._SetOutput(blockdev_output)
+
+    call = self.client.exec_command("blockdev --getsize64 /dev/xvda")
+    call.AndReturn((None, stdout, None))
+
+    call = self.module.subprocess.Popen(["swapon", "-s"],
+                                        stdout=self.module.subprocess.PIPE,
+                                        stderr=self.module.subprocess.PIPE)
+    call.AndReturn(popen)
+    popen.communicate().AndReturn((swapon_output, None))
+
+    self.mox.ReplayAll()
+    total, swap = self.module.GetDiskSize(self.client)
+    self.assertEqual(total, self.totsize)
+    # swap size should be about 10% of the total
+    self.assertEqual(swap, self.totsize/10)
+    self.assertNotEqual(swap, self.swapsize)
+    self.mox.VerifyAll()
+
+  def testPartitionTargetDisksSendsCommands(self):
+    sfdisk_command = """sfdisk -uM /dev/xvda <<EOF
 0,%d,83
 ,,82
 EOF
-""" % (tot_cyls - swap_cyls)
+""" % (self.totsize - self.swapsize)
 
     self._MockRunCommandAndWait(sfdisk_command)
 
@@ -133,7 +205,7 @@ EOF
     self._MockRunCommandAndWait(commands)
 
     self.mox.ReplayAll()
-    self.module.PartitionTargetDisks(self.client, swap_cyls)
+    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
     self.mox.VerifyAll()
 
   def testTransferFilesExitsOnError(self):
@@ -185,7 +257,9 @@ EOF
                                     self.pkey).AndReturn(self.client)
     self.module.MountSourceFilesystems(self.root_dev)
     self.module.VerifyKernelMatches(self.client).AndReturn(True)
-    self.module.PartitionTargetDisks(self.client, 10)
+    self.module.GetDiskSize(self.client).AndReturn((self.totsize,
+                                                    self.swapsize))
+    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
     self.module.TransferFiles("root", self.host, self.pkeyfile)
     self.module.RunFixScripts(self.client)
     self.module.ShutDownTarget(self.client)
@@ -226,7 +300,10 @@ EOF
                                     self.pkey).AndReturn(self.client)
     self.module.MountSourceFilesystems(self.root_dev)
     self.module.VerifyKernelMatches(self.client).AndReturn(True)
-    call = self.module.PartitionTargetDisks(self.client, 10)
+    self.module.GetDiskSize(self.client).AndReturn((self.totsize,
+                                                    self.swapsize))
+    call = self.module.PartitionTargetDisks(self.client, self.totsize,
+                                            self.swapsize)
     call.AndRaise(self.module.P2VError("meep"))
     # Transfer is cancelled because of the error, but still we have:
     self.module.UnmountSourceFilesystems()
