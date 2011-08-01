@@ -22,6 +22,7 @@
 
 import mox
 import paramiko
+import types
 import unittest
 
 import p2v_transfer
@@ -80,11 +81,13 @@ class P2vtransferTest(unittest.TestCase):
     return stdout
 
   def _MockSubprocessCallSuccess(self, command_list):
-    self.mox.StubOutWithMock(self.module.subprocess, "call")
+    if type(self.module.subprocess.call) == types.FunctionType:
+      self.mox.StubOutWithMock(self.module.subprocess, "call")
     self.module.subprocess.call(command_list).AndReturn(0)
 
   def _MockSubprocessCallFailure(self, command_list):
-    self.mox.StubOutWithMock(self.module.subprocess, "call")
+    if type(self.module.subprocess.call) == types.FunctionType:
+      self.mox.StubOutWithMock(self.module.subprocess, "call")
     self.module.subprocess.call(command_list).AndReturn(1)
 
   def _StubOutAllModuleFunctions(self):
@@ -264,6 +267,9 @@ EOF
 
   def testUnmountSourceFilesystemsExitsOnError(self):
     command_list = ["umount", self.module.SOURCE_MOUNT]
+    # Will retry twice before quitting
+    self._MockSubprocessCallFailure(command_list)
+    self._MockSubprocessCallFailure(command_list)
     self._MockSubprocessCallFailure(command_list)
     self.mox.ReplayAll()
     self.assertRaises(SystemExit, self.module.UnmountSourceFilesystems)

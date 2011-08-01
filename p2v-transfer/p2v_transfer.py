@@ -354,13 +354,17 @@ def UnmountSourceFilesystems():
 
   Unmounts all filesystems mounted by MountSourceFilesystems. Currently, since
   only the root filesystem ever gets mounted, this only unmounts the root
-  filesystem.
+  filesystem. Retries a couple of times in case the filesystem is busy the
+  first time.
 
   """
-  errcode = subprocess.call(["umount", SOURCE_MOUNT])
-  if errcode:
-    print "Error unmounting %s" % SOURCE_MOUNT
-    sys.exit(1)
+  for trynum in range(3):
+    errcode = subprocess.call(["umount", SOURCE_MOUNT])
+    if not errcode:
+      return
+    time.sleep(0.5)
+  print "Error unmounting %s" % SOURCE_MOUNT
+  sys.exit(1)
 
 
 def CleanUpTarget(client):
@@ -401,6 +405,7 @@ def main(argv):
       uid = os.getuid()
       if uid != 0:
         raise P2VError("Must be run as root")
+
       key = LoadSSHKey(keyfile)
       client = EstablishConnection(user, host, key)
       MountSourceFilesystems(root_dev)
