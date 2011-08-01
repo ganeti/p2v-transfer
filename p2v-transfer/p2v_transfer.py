@@ -28,6 +28,8 @@ necessary to gain access to the bootstrap OS.
 """
 
 
+import re
+import stat
 import sys
 import optparse
 import os
@@ -56,7 +58,17 @@ def ParseOptions(argv):
     parser.print_help()
     sys.exit(1)
 
-  # TODO(benlipton): scrub args
+  try:
+    stats = os.stat(args[0])
+    if not stat.S_ISBLK(stats.st_mode):
+      raise P2VError("%s is not a device file" % args[0])
+  except OSError, e:
+    raise P2VError(str(e))
+
+  if not re.match("[-a-zA-Z0-9]+$", args[1]):
+    raise P2VError("Invalid hostname %s" % args[1])
+  if not os.path.isfile(args[2]):
+    raise P2VError("Private key file %s not found" % args[2])
 
   return options, args
 
@@ -399,14 +411,15 @@ def DisplayCommandEnd(message):
 
 
 def main(argv):
-  options, args = ParseOptions(argv)
-
-  user = "root"
-  root_dev, host, keyfile = args
-
   client = None
+  uid = None
+
   try:
     try:
+      options, args = ParseOptions(argv)
+      user = "root"
+      root_dev, host, keyfile = args
+
       uid = os.getuid()
       if uid != 0:
         raise P2VError("Must be run as root")

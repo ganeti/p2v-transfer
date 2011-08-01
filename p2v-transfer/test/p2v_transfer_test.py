@@ -92,6 +92,7 @@ class P2vtransferTest(unittest.TestCase):
 
   def _StubOutAllModuleFunctions(self):
     self.module_functions = [
+      "ParseOptions",
       "EstablishConnection",
       "GetDiskSize",
       "PartitionTargetDisks",
@@ -297,6 +298,9 @@ EOF
     self.mox.StubOutWithMock(self.module.os, "getuid")
     self._StubOutAllModuleFunctions()
 
+    self.module.ParseOptions(self.test_argv).AndReturn((None, (self.root_dev,
+                                                               self.host,
+                                                               self.pkeyfile)))
     self.module.os.getuid().AndReturn(0)  # Wants to run as root
     self.module.LoadSSHKey(self.pkeyfile).AndReturn(self.pkey)
     self.module.EstablishConnection("root",
@@ -321,6 +325,9 @@ EOF
     self.mox.StubOutWithMock(self.module.os, "getuid")
     self._StubOutAllModuleFunctions()
 
+    self.module.ParseOptions(self.test_argv).AndReturn((None, (self.root_dev,
+                                                               self.host,
+                                                               self.pkeyfile)))
     self.module.os.getuid().AndReturn(500)
 
     self.mox.ReplayAll()
@@ -341,6 +348,9 @@ EOF
     self.mox.StubOutWithMock(self.module.os, "getuid")
     self._StubOutAllModuleFunctions()
 
+    self.module.ParseOptions(self.test_argv).AndReturn((None, (self.root_dev,
+                                                               self.host,
+                                                               self.pkeyfile)))
     self.module.os.getuid().AndReturn(0)  # Wants to run as root
     self.module.LoadSSHKey(self.pkeyfile).AndReturn(self.pkey)
     self.module.EstablishConnection("root",
