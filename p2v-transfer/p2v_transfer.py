@@ -106,8 +106,11 @@ def EstablishConnection(user, host, key):
   client = paramiko.SSHClient()
   client.set_missing_host_key_policy(paramiko.WarningPolicy())
   client.load_system_host_keys()
-  client.connect(host, username=user, pkey=key,
-                 allow_agent=False, look_for_keys=False)
+  try:
+    client.connect(host, username=user, pkey=key,
+                   allow_agent=False, look_for_keys=False)
+  except IOError, e:
+    raise P2VError("Problem connecting to instance: %s" % e)
 
   DisplayCommandEnd("done")
   return client
@@ -359,6 +362,8 @@ def UnmountSourceFilesystems():
 
   """
   for trynum in range(3):
+    if not os.path.exists(SOURCE_MOUNT) or not os.path.ismount(SOURCE_MOUNT):
+      return
     errcode = subprocess.call(["umount", SOURCE_MOUNT])
     if not errcode:
       return
@@ -417,7 +422,7 @@ def main(argv):
         ShutDownTarget(client)
       else:
         raise P2VError("Instance kernel not present on source OS")
-    except P2VError, e:
+    except Exception, e:  # Make sure any error gets printed out
       print e
       sys.exit(1)
   finally:
