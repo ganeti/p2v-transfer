@@ -70,6 +70,10 @@ class P2vtransferTest(unittest.TestCase):
     stderr = _MockChannelFile(self.mox)
     self.client.exec_command(command).AndReturn((stdin, stdout, stderr))
 
+    # pretend the command is taking a few cycles
+    stdout.channel.exit_status_ready().AndReturn(False)
+    stdout.channel.exit_status_ready().AndReturn(False)
+    stdout.channel.exit_status_ready().AndReturn(True)
     stdout.channel.recv_exit_status().AndReturn(exit_status)
 
     # return stdout in case we want to do something else with it

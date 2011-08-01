@@ -71,13 +71,17 @@ def LoadSSHKey(keyfile):
   @raise P2VError: Keyfile is missing, invalid, or encrypted.
 
   """
+  DisplayCommandStart("Loading SSH keys...")
+
   try:
     key = paramiko.DSSKey.from_private_key_file(keyfile)
-    return key
   except paramiko.PasswordRequiredException:
     raise P2VError("Why is the private key file encrypted?")
   except (IOError, paramiko.SSHException):
     raise P2VError("Key file is missing or invalid")
+
+  DisplayCommandEnd("done")
+  return key
 
 
 def EstablishConnection(user, host, key):
@@ -95,13 +99,17 @@ def EstablishConnection(user, host, key):
 
   @rtype: paramiko.SSHClient
   @returns: SSHClient object connected to a root shell on the target instance.
+
   """
+  DisplayCommandStart("Connecting to instance...")
 
   client = paramiko.SSHClient()
   client.set_missing_host_key_policy(paramiko.WarningPolicy())
   client.load_system_host_keys()
   client.connect(host, username=user, pkey=key,
                  allow_agent=False, look_for_keys=False)
+
+  DisplayCommandEnd("done")
   return client
 
 
@@ -121,9 +129,17 @@ def VerifyKernelMatches(client):
   @returns: True if the proper kernel is installed, else False.
 
   """
+  DisplayCommandStart("Checking kernel compatibility...")
+
   stdin, stdout, stderr = client.exec_command("uname -r")
   kernel = stdout.read().strip()
-  return os.path.exists(os.path.join(SOURCE_MOUNT, "lib", "modules", kernel))
+
+  if os.path.exists(os.path.join(SOURCE_MOUNT, "lib", "modules", kernel)):
+    DisplayCommandEnd("Kernel matches")
+    return True
+  else:
+    DisplayCommandEnd("Kernel does not match")
+    return False
 
 
 def MountSourceFilesystems(root_dev):
@@ -140,6 +156,8 @@ def MountSourceFilesystems(root_dev):
     source OS
 
   """
+  DisplayCommandStart("Mounting filesystems to copy...")
+
   if not os.path.isdir(SOURCE_MOUNT):
     os.mkdir(SOURCE_MOUNT)
   errcode = subprocess.call(["mount", root_dev, SOURCE_MOUNT])
@@ -147,6 +165,8 @@ def MountSourceFilesystems(root_dev):
   if errcode:
     print "Error mounting %s" % root_dev
     sys.exit(1)
+
+  DisplayCommandEnd("done")
 
 
 def ShutDownTarget(client):
@@ -158,7 +178,9 @@ def ShutDownTarget(client):
   @param client: SSH client object used to connect to the instance.
 
   """
+  DisplayCommandStart("Transfer complete! Shutting down the instance...")
   _RunCommandAndWait(client, "poweroff")
+  DisplayCommandEnd("done")
 
 
 def _RunCommandAndWait(client, command):
@@ -172,6 +194,9 @@ def _RunCommandAndWait(client, command):
 
   """
   stdin, stdout, stderr = client.exec_command(command)
+
+  _WaitForCompletion(stdout.channel)
+
   if stdout.channel.recv_exit_status() != 0:
     raise P2VError("Remote command returned nonzero exit status: %s" % command)
 
@@ -187,8 +212,19 @@ def _WaitForCompletion(channel):
     stdin, stdout, stderr = exec_command(), use stdout.channel.
 
   """
+  start = time.time()
+  gave_warning = False
+
   while not channel.exit_status_ready():
     time.sleep(.01)
+    if time.time() - start > 60 and not gave_warning:
+      gave_warning = True
+      print ("\nThe current command is taking a while to complete. Please make"
+             " sure the instance is still pingable. If so, try waiting another"
+             " few minutes.")
+
+  if gave_warning:
+    print "The command has completed."
 
 
 def GetDiskSize(client):
@@ -204,6 +240,8 @@ def GetDiskSize(client):
   @return: Total size in megabytes, swap size in megabytes
 
   """
+  DisplayCommandStart("Determining partition sizes...")
+
    # Find out how many MB are available on target
   stdin, stdout, stderr = client.exec_command("blockdev --getsize64 /dev/xvda")
   for line in stdout:
@@ -224,7 +262,11 @@ def GetDiskSize(client):
     except ValueError:
       pass  # This line doesn't have data on it
 
-  return total_megs, min(swap_megs, int(total_megs * 0.1))
+  swap_size = min(swap_megs, int(total_megs * 0.1))
+
+  DisplayCommandEnd("%d MB disk, %d MB reserved for swap" % (total_megs,
+                                                             swap_size))
+  return total_megs, swap_size
 
 
 def PartitionTargetDisks(client, total_megs, swap_megs):
@@ -241,14 +283,14 @@ def PartitionTargetDisks(client, total_megs, swap_megs):
   @param swap_megs: Desired size of swap space, in megabytes
 
   """
+  DisplayCommandStart("Partitioning disks...")
+
   nonswap_megs = total_megs - swap_megs
   sfdisk_command = """sfdisk -uM /dev/xvda <<EOF
 0,%d,83
 ,,82
 EOF
 """ % nonswap_megs
-
-  _RunCommandAndWait(client, sfdisk_command)
 
   other_commands = [
     "mkfs.ext3 /dev/xvda1",
@@ -258,11 +300,14 @@ EOF
     ]
 
   try:
+    _RunCommandAndWait(client, sfdisk_command)
     _RunCommandAndWait(client, " && ".join(other_commands))
   except P2VError:
     # Make sure target is unmounted, then try again
     CleanUpTarget(client)
     _RunCommandAndWait(client, " && ".join(other_commands))
+
+  DisplayCommandEnd("done")
 
 
 def TransferFiles(user, host, keyfile):
@@ -277,12 +322,16 @@ def TransferFiles(user, host, keyfile):
   @param host: Hostname of instance to connect to.
 
   """
+  DisplayCommandStart("Transferring files. This will take a while...")
+
   errcode = subprocess.call(["rsync", "-aHAXz", "-e", "ssh -i %s" % keyfile,
                              "%s/" % SOURCE_MOUNT,
                              "%s@%s:%s" % (user, host, TARGET_MOUNT)])
   if errcode:
     print "Error using rsync to transfer files"
     sys.exit(1)
+
+  DisplayCommandEnd("done")
 
 
 def RunFixScripts(client):
@@ -295,7 +344,9 @@ def RunFixScripts(client):
   @param client: SSH client object used to connect to the instance.
 
   """
+  DisplayCommandStart("Running fix scripts...")
   _RunCommandAndWait(client, "run-parts /usr/lib/ganeti/fixes")
+  DisplayCommandEnd("done")
 
 
 def UnmountSourceFilesystems():
@@ -321,9 +372,21 @@ def CleanUpTarget(client):
 
   @type client: paramiko.SSHClient
   @param client: SSH client object used to connect to the instance.
+
   """
   _RunCommandAndWait(client, "umount %s ; rmdir %s" % (TARGET_MOUNT,
                                                        TARGET_MOUNT))
+
+
+def DisplayCommandStart(message):
+  """Display a message that an action is beginning."""
+  print message,
+  sys.stdout.flush()
+
+
+def DisplayCommandEnd(message):
+  """Display a message that an action has completed."""
+  print message
 
 
 def main(argv):
