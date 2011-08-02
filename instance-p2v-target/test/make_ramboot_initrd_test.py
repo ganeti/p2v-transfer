@@ -185,6 +185,7 @@ class MakeRambootInitrdTest(unittest.TestCase):
 
   def testBuildInitrdRunsCommand(self):
     self.mox.StubOutWithMock(mkinitrd.subprocess, "call")
+    self.mox.StubOutWithMock(os.path, "exists")
     test_name = "testinitrd"
     test_tmp = os.path.join("/tmp", "test_makeinitrd")
     test_out = os.path.join(test_tmp, test_name)
@@ -195,26 +196,29 @@ class MakeRambootInitrdTest(unittest.TestCase):
     self.mox.ReplayAll()
 
     try:
-      try:
-        mkinitrd.BuildInitrd(test_tmp, test_conf, test_name, test_version)
-      except mkinitrd.Error:
-        self.fail()
-    finally:
-      self.mox.VerifyAll()
+      mkinitrd.BuildInitrd(test_tmp, test_conf, test_name, test_version, False)
+    except mkinitrd.Error:
+      self.fail()
+
+    self.mox.VerifyAll()
 
   def testBuildInitrdRaisesErrorOnFailure(self):
     self.mox.StubOutWithMock(mkinitrd.subprocess, "call")
+    self.mox.StubOutWithMock(os.path, "exists")
     test_name = "testinitrd"
     test_tmp = os.path.join("/tmp", "test_makeinitrd")
     test_out = os.path.join(test_tmp, test_name)
     test_conf = os.path.join(test_tmp, "conf")
     test_version = "2.6-test"
+
     mkinitrd.subprocess.call(["mkinitramfs", "-d", test_conf,
                               "-o", test_out, test_version]).AndReturn(1)
+    os.path.exists(os.path.join("/lib/modules", test_version)).AndReturn(False)
+
     self.mox.ReplayAll()
 
     self.assertRaises(mkinitrd.Error, mkinitrd.BuildInitrd, test_tmp,
-                      test_conf, test_name, test_version)
+                      test_conf, test_name, test_version, False)
 
     self.mox.VerifyAll()
 
@@ -276,7 +280,7 @@ class MakeRambootInitrdTest(unittest.TestCase):
     mkinitrd.CreateTempDir(old_conf_dir).AndReturn((temp_dir, new_conf_dir))
     mkinitrd.AddScript(new_conf_dir)
     mkinitrd.BuildInitrd(temp_dir, new_conf_dir, file_name,
-                         version).AndReturn(temp_out)
+                         version, False).AndReturn(temp_out)
     mkinitrd.InstallInitrd(temp_out, boot_dir, file_name, False)
     mkinitrd.CleanUp(temp_dir)
 
@@ -307,7 +311,7 @@ class MakeRambootInitrdTest(unittest.TestCase):
     mkinitrd.CreateTempDir(old_conf_dir).AndReturn((temp_dir, new_conf_dir))
     mkinitrd.AddScript(new_conf_dir)
     mkinitrd.BuildInitrd(temp_dir, new_conf_dir, file_name,
-                         version).AndReturn(temp_out)
+                         version, False).AndReturn(temp_out)
     mkinitrd.InstallInitrd(temp_out, boot_dir, file_name, False)
     mkinitrd.CleanUp(temp_dir)
 
@@ -336,7 +340,7 @@ class MakeRambootInitrdTest(unittest.TestCase):
     mkinitrd.CreateTempDir(old_conf_dir).AndReturn((temp_dir, new_conf_dir))
     mkinitrd.AddScript(new_conf_dir)
     mkinitrd.BuildInitrd(temp_dir, new_conf_dir, file_name,
-                         version).AndRaise(mkinitrd.Error("test!"))
+                         version, False).AndRaise(mkinitrd.Error("test!"))
     mkinitrd.CleanUp(temp_dir)
 
     self.mox.ReplayAll()

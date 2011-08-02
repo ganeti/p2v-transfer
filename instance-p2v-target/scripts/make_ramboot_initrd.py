@@ -108,6 +108,12 @@ def ParseOptions(argv):
                     help=("generate initrd for kernel named VERSION "
                           "[currently running kernel]"),
                     default=None)
+  parser.add_option("--no-modules", action="store_true", dest="no_modules",
+                    help=("Create directory in /lib/modules to fool"
+                          " mkinitramfs into building initrd for non-modular"
+                          " kernel"),
+                    default=False)
+
 
   (options, _) = parser.parse_args(argv[1:])
 
@@ -189,7 +195,7 @@ def AddScript(conf_dir):
   os.chmod(movetoram_name, 0755)
 
 
-def BuildInitrd(temp_dir, conf_dir, file_name, version):
+def BuildInitrd(temp_dir, conf_dir, file_name, version, no_modules):
   """Build the initrd using mkinitramfs.
 
   Runs the program mkinitramfs to create an initrd for the specified
@@ -199,17 +205,32 @@ def BuildInitrd(temp_dir, conf_dir, file_name, version):
   @param conf_dir: temporary configuration directory with added script
   @param file_name: what to call the initrd file
   @param version: the kernel version to use
+  @param no_modules: whether the --no-modules option was given
 
   @return: the location of the generated initrd in the temp_dir
 
   @raises Error: call to mkinitramfs failed
 
   """
+  mods_dir = os.path.join("/lib/modules", version)
+  if no_modules and not os.path.exists(mods_dir):
+    try:
+      os.mkdir(mods_dir)
+    except OSError:
+      raise Error("mkdir failed. Try running as root.")
+
   temp_out = os.path.join(temp_dir, file_name)
   ret = subprocess.call(["mkinitramfs", "-d", conf_dir,
                          "-o", temp_out, version])
+
   if ret != 0:
-    raise Error("Failed building initramfs")
+    if not os.path.exists(mods_dir):
+      raise Error("%s does not exist. On some operating systems, this causes"
+                  " mkinitramfs to fail. If you are using a kernel with no"
+                  " modules, try using the --no-modules option, which creates"
+                  " this directory." % mods_dir)
+    else:
+      raise Error("Failed building initramfs.")
 
   return temp_out
 
@@ -272,13 +293,14 @@ def main(argv):
 
       if verbose:
         print "Building..."
-      temp_out = BuildInitrd(temp_dir, new_conf_dir, file_name, version)
+      temp_out = BuildInitrd(temp_dir, new_conf_dir, file_name, version,
+                             options.no_modules)
 
       if verbose:
         print "Installing..."
       InstallInitrd(temp_out, install_dir, file_name, options.overwrite)
 
-    except Error, e:
+    except Exception, e:
       print e
       sys.exit(1)
   finally:
