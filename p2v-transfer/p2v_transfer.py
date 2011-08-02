@@ -253,11 +253,16 @@ EOF
   other_commands = [
     "mkfs.ext3 /dev/xvda1",
     "mkswap /dev/xvda2",
-    "mkdir /target",
-    "mount /dev/xvda1 /target",
+    "mkdir -p %s" % TARGET_MOUNT,
+    "mount /dev/xvda1 %s" % TARGET_MOUNT,
     ]
 
-  _RunCommandAndWait(client, " && ".join(other_commands))
+  try:
+    _RunCommandAndWait(client, " && ".join(other_commands))
+  except P2VError:
+    # Make sure target is unmounted, then try again
+    CleanUpTarget(client)
+    _RunCommandAndWait(client, " && ".join(other_commands))
 
 
 def TransferFiles(user, host, keyfile):
@@ -307,12 +312,27 @@ def UnmountSourceFilesystems():
     sys.exit(1)
 
 
+def CleanUpTarget(client):
+  """Unmount target filesystem, remove /target directory.
+
+  Cleans up the target to make it look like the p2v_transfer was never run.
+  This means that if it doesn't complete successfully, we should be able to do
+  it again.
+
+  @type client: paramiko.SSHClient
+  @param client: SSH client object used to connect to the instance.
+  """
+  _RunCommandAndWait(client, "umount %s ; rmdir %s" % (TARGET_MOUNT,
+                                                       TARGET_MOUNT))
+
+
 def main(argv):
   options, args = ParseOptions(argv)
 
   user = "root"
   root_dev, host, keyfile = args
 
+  client = None
   try:
     try:
       uid = os.getuid()
@@ -335,6 +355,8 @@ def main(argv):
   finally:
     if uid == 0:
       UnmountSourceFilesystems()
+    if client:
+      CleanUpTarget(client)
 
 
 if __name__ == "__main__":

@@ -95,6 +95,7 @@ class P2vtransferTest(unittest.TestCase):
       "ShutDownTarget",
       "VerifyKernelMatches",
       "LoadSSHKey",
+      "CleanUpTarget",
       ]
     for func in self.module_functions:
       self.mox.StubOutWithMock(self.module, func)
@@ -199,7 +200,7 @@ EOF
 
     commands = ("mkfs.ext3 /dev/xvda1"
                 " && mkswap /dev/xvda2"
-                " && mkdir %s"
+                " && mkdir -p %s"
                 " && mount /dev/xvda1 %s") % (self.module.TARGET_MOUNT,
                                               self.module.TARGET_MOUNT)
     self._MockRunCommandAndWait(commands)
@@ -207,6 +208,31 @@ EOF
     self.mox.ReplayAll()
     self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
     self.mox.VerifyAll()
+
+  def testPartitionTargetDisksRetriesFormatOnError(self):
+    self.mox.StubOutWithMock(self.module, 'CleanUpTarget')
+
+    sfdisk_command = """sfdisk -uM /dev/xvda <<EOF
+0,%d,83
+,,82
+EOF
+""" % (self.totsize - self.swapsize)
+
+    self._MockRunCommandAndWait(sfdisk_command)
+
+    commands = ("mkfs.ext3 /dev/xvda1"
+                " && mkswap /dev/xvda2"
+                " && mkdir -p %s"
+                " && mount /dev/xvda1 %s") % (self.module.TARGET_MOUNT,
+                                              self.module.TARGET_MOUNT)
+    self._MockRunCommandAndWait(commands, 1)  # maybe /target is mounted
+    self.module.CleanUpTarget(self.client)    # so, make sure it's unmounted
+    self._MockRunCommandAndWait(commands)     # and try again
+
+    self.mox.ReplayAll()
+    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
+    self.mox.VerifyAll()
+    pass
 
   def testTransferFilesExitsOnError(self):
     user = "root"
@@ -264,6 +290,7 @@ EOF
     self.module.RunFixScripts(self.client)
     self.module.ShutDownTarget(self.client)
     self.module.UnmountSourceFilesystems()
+    self.module.CleanUpTarget(self.client)
 
     self.mox.ReplayAll()
     self.module.main(self.test_argv)
@@ -307,6 +334,7 @@ EOF
     call.AndRaise(self.module.P2VError("meep"))
     # Transfer is cancelled because of the error, but still we have:
     self.module.UnmountSourceFilesystems()
+    self.module.CleanUpTarget(self.client)
 
     self.mox.ReplayAll()
     self.assertRaises(SystemExit, self.module.main, self.test_argv)
