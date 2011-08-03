@@ -52,6 +52,13 @@ def ParseOptions(argv):
 
   parser = optparse.OptionParser(usage=usage)
 
+  parser.add_option("--skip-kernel-check", action="store_true",
+                    dest="skip_kernel_check", default=False,
+                    help=("Transfer even if modules for instance kernel are"
+                          " not installed on source machine. Useful if you are"
+                          " feeling adventurous, or your instance kernel does"
+                          " not use modules."))
+
   options, args = parser.parse_args(argv[1:])
 
   if len(args) != 3:
@@ -435,14 +442,16 @@ def main(argv):
       key = LoadSSHKey(keyfile)
       client = EstablishConnection(user, host, key)
       MountSourceFilesystems(root_dev)
-      if VerifyKernelMatches(client):
+      if options.skip_kernel_check or VerifyKernelMatches(client):
         total_megs, swap_megs = GetDiskSize(client)
         PartitionTargetDisks(client, total_megs, swap_megs)
         TransferFiles(user, host, keyfile)
         RunFixScripts(client)
         ShutDownTarget(client)
       else:
-        raise P2VError("Instance kernel not present on source OS")
+        raise P2VError("Modules matching instance kernel not present on source"
+                       " OS. If your kernel does not use modules, you may want"
+                       " the --skip-kernel-check option.")
     except Exception, e:  # Make sure any error gets printed out
       print e
       sys.exit(1)
