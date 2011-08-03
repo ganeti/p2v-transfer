@@ -32,6 +32,7 @@ class _MockChannelFile:
   def __init__(self, mox_obj):
     self.mox = mox_obj
     self.channel = self.mox.CreateMock(paramiko.Channel)
+    self.outlist = []
 
   def _SetOutput(self, outlist):
     if isinstance(outlist, str):
@@ -40,6 +41,9 @@ class _MockChannelFile:
 
   def __getitem__(self, idx):
     return self.outlist[idx]
+
+  def read(self):
+    return "\n".join(self.outlist)
 
   def close(self):
     pass

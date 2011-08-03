@@ -220,7 +220,9 @@ def _RunCommandAndWait(client, command):
   _WaitForCompletion(stdout.channel)
 
   if stdout.channel.recv_exit_status() != 0:
-    raise P2VError("Remote command returned nonzero exit status: %s" % command)
+    raise P2VError("Remote command returned nonzero exit status: %s\n"
+                   "stdout:\n%s\nstderr:\n%s\n" % (command, stdout.read(),
+                                                   stderr.read()))
 
 
 def _WaitForCompletion(channel):
