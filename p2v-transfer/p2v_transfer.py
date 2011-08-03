@@ -65,7 +65,7 @@ def ParseOptions(argv):
   except OSError, e:
     raise P2VError(str(e))
 
-  if not re.match("[-a-zA-Z0-9]+$", args[1]):
+  if not re.match("[-a-zA-Z0-9.]+$", args[1]):
     raise P2VError("Invalid hostname %s" % args[1])
   if not os.path.isfile(args[2]):
     raise P2VError("Private key file %s not found" % args[2])
