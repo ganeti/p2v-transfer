@@ -317,9 +317,12 @@ EOF
   try:
     _RunCommandAndWait(client, sfdisk_command)
     _RunCommandAndWait(client, " && ".join(other_commands))
-  except P2VError:
+  except P2VError, e:
+    print e
+    print "Retrying..."
     # Make sure target is unmounted, then try again
     CleanUpTarget(client)
+    _RunCommandAndWait(client, sfdisk_command)
     _RunCommandAndWait(client, " && ".join(other_commands))
 
   DisplayCommandEnd("done")
@@ -395,8 +398,13 @@ def CleanUpTarget(client):
   @param client: SSH client object used to connect to the instance.
 
   """
-  _RunCommandAndWait(client, "umount %s ; rmdir %s" % (TARGET_MOUNT,
-                                                       TARGET_MOUNT))
+  try:
+    _RunCommandAndWait(client, "umount %s ; rmdir %s" % (TARGET_MOUNT,
+                                                         TARGET_MOUNT))
+  except P2VError, e:
+    # many things can make this complain, so don't crash because everything
+    # might actually be ok
+    print e
 
 
 def DisplayCommandStart(message):
