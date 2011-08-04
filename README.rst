@@ -127,11 +127,11 @@ installed into root's ``.ssh/authorized_keys`` file on the instance, and
 the private key will be provided to the user so that they can make the
 transfer. Generate the keys, with no passphrase, using the commands::
 
-  ssh-keygen -t dsa -N "" -f /etc/ganeti/instance-p2v/id_dsa
-  gnt-cluster copyfile /etc/ganeti/instance-p2v/id_dsa.pub
+  ssh-keygen -t dsa -N "" -f /etc/ganeti/instance-p2v-target/id_dsa
+  gnt-cluster copyfile /etc/ganeti/instance-p2v-target/id_dsa.pub
 
-Keep the private key (``/etc/ganeti/instance-p2v/id_dsa``) somewhere
-safe, and give it to users who wish to use the P2V system.
+Keep the private key (``/etc/ganeti/instance-p2v-target/id_dsa``)
+somewhere safe, and give it to users who wish to use the P2V system.
 
 
 Creating a Target Instance
@@ -148,12 +148,12 @@ initrd for the boot rather than the default one. The command line will
 look something like the following::
 
   gnt-instance add -t<template> -s<size> -o p2v-target+default \
-  --no-start <hostname>
+  -n<nodes> --no-start <hostname>
 
 Now boot the instance using the kernel and initrd that work on the
 initrd::
 
-  gnt-instance start -H kernel_path=/boot/$DEB_KERNEL,\
+  gnt-instance start -H kernel_path=/boot/vmlinuz-$DEB_KERNEL,\
   initrd_path=/boot/initrd.img-$DEB_KERNEL-ramboot <hostname>
 
 
