@@ -1,7 +1,8 @@
 docrst = \
-	../README.rst
-	design.rst
-	README.debootstrap.rst
+	../README.rst \
+	design.rst \
+	README.debootstrap.rst \
+	instance-p2v-target.rst
 
 dochtml = $(docrst:.rst=.html)
 
