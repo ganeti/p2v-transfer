@@ -63,7 +63,10 @@ python modules tree (e.g.
 a variable named OS_SEARCH_PATH will list all the directories in which
 ganeti will look for OS definitions.
 
-.. TODO(benlipton): enable kernel in EXTRA_PKGS
+Once it is installed, edit the file
+``$PREFIX/etc/ganeti/instance-p2v-target/p2v-target.conf`` to uncomment
+the ``EXTRA_PKGS`` value that is appropriate to the hypervisor you are
+using on this cluster.
 
 
 Note: Configuring the Bootstrap OS
