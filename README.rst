@@ -41,32 +41,41 @@ created.
 In order to install this package from source, you need to determine what
 options ganeti itself has been configured with. If ganeti was built
 directly from source, then the only place it looks for OS definitions is
-``/srv/ganeti/os``, and you need to install the OS under it. *On each
-node of the cluster,* run the following::
+``/srv/ganeti/os``, and you need to install the OS under it. Distribute
+and install the package::
 
-  ./configure --prefix=/usr --localstatedir=/var \
-    --sysconfdir=/etc \
-    --with-os-dir=/srv/ganeti/os
-  sudo make install-target
+  gnt-cluster copyfile ganeti-p2v-transfer-0.1.tar.gz
+  gnt-cluster command "tar xf ganeti-p2v-transfer-0.1.tar.gz &&
+    ./configure --prefix=/usr --localstatedir=/var \
+      --sysconfdir=/etc \
+      --with-os-dir=/srv/ganeti/os &&
+    make install-target"
 
 If ganeti was installed from a package, its default OS path should
-already include /usr/share/ganeti/os, so you can just run::
+already include /usr/share/ganeti/os, so you can omit
+``--with-os-dir``::
 
-  ./configure -prefix=/usr --localstatedir=/var \
-    --sysconfdir=/etc
-  sudo make install-target
+  gnt-cluster copyfile ganeti-p2v-transfer-0.1.tar.gz
+  gnt-cluster command "tar xf ganeti-p2v-transfer-0.1.tar.gz &&
+    ./configure --prefix=/usr --localstatedir=/var \
+      --sysconfdir=/etc &&
+    make install-target"
 
-The actual path that ganeti has been installed with can be determined by
-looking for a file named _autoconf.py under a ganeti directory in the
-python modules tree (e.g.
-``/usr/lib/python2.4/site-packages/ganeti/_autoconf.py``). In this file,
-a variable named OS_SEARCH_PATH will list all the directories in which
-ganeti will look for OS definitions.
 
-Once it is installed, edit the file
+Once the package is installed, edit the file
 ``$PREFIX/etc/ganeti/instance-p2v-target/p2v-target.conf`` to uncomment
 the ``EXTRA_PKGS`` value that is appropriate to the hypervisor you are
 using on this cluster.
+
+The actual path that ganeti will search for operating system definitions
+can be determined easily in ganeti 2.4.3 by running ``gnt-cluster info``
+and looking for the OS search path. In earlier versions, it can be found
+by looking for a file named _autoconf.py under a ganeti directory in the
+python modules tree (e.g.
+``/usr/lib/python2.4/site-packages/ganeti/_autoconf.py``). In this file,
+a variable named OS_SEARCH_PATH will list all the directories in which
+ganeti will look for OS definitions. On of these should be passed to
+``./configure`` as the value of ``--with-os-dir``.
 
 
 Note: Configuring the Bootstrap OS
@@ -88,12 +97,26 @@ running::
   sudo make_ramboot_initrd.py -V $DEB_KERNEL
 
 on the master node, where $DEB_KERNEL is the name of a kernel that can
-be used to boot a debootstrap instance. This should create the file
+be used to boot a debootstrap instance. That is, if the filename of the
+kernel is /boot/vmlinuz-2.6.32-generic, DEB_KERNEL would be
+"2.6.32-generic". This command should create the file
 ``/boot/initrd.img-$DEB_KERNEL-ramboot``. Copy this file to the other
 nodes with::
 
   gnt-cluster copyfile /boot/initrd.img-$DEB_KERNEL-ramboot
 
+Compatibility Warning
+~~~~~~~~~~~~~~~~~~~~~
+
+The generated initrd depends heavily on the version of initramfs-tools
+installed on the machine that generates it. As a result, it may not be
+compatible with the kernel that is to be used for booting the bootstrap
+OS. In this case, the bootstrap OS may not boot, or may not be able to
+find the root device. If this happens, a good way to improve
+compatibility is to use a machine that is already running the instance
+kernel, perhaps a "normal" (non-p2v) instance on the same cluster.
+Install and run ``make_ramboot_initrd.py`` on this machine to generate
+the desired initrd.
 
 Creating a Keypair
 ------------------
@@ -102,13 +125,13 @@ Users will authenticate to their instances using an SSH keypair
 generated in advance by the administrator. The public key will be
 installed into root's ``.ssh/authorized_keys`` file on the instance, and
 the private key will be provided to the user so that they can make the
-transfer. Generate the keys, with no passphrase, using the command::
+transfer. Generate the keys, with no passphrase, using the commands::
 
-  ssh-keygen -t dsa -N ""
+  ssh-keygen -t dsa -N "" -f /etc/ganeti/instance-p2v/id_dsa
+  gnt-cluster copyfile /etc/ganeti/instance-p2v/id_dsa.pub
 
-Place the public key in ``/etc/ganeti/instance-p2v-target/id_dsa.pub``
-and copy it to all nodes. Keep the private key somewhere safe, and give
-it to users who wish to use the P2V system.
+Keep the private key (``/etc/ganeti/instance-p2v/id_dsa``) somewhere
+safe, and give it to users who wish to use the P2V system.
 
 
 Creating a Target Instance
