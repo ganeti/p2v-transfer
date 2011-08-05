@@ -60,6 +60,7 @@ class P2vtransferTest(unittest.TestCase):
     self.host = "testmachine"
     self.pkeyfile = "/home/testuser/.ssh/id_dsa"
     self.pkey = "thepkey"
+    self.user = "testuser"
     self.test_argv = [
       "p2v_transfer.py",
       self.root_dev,
@@ -247,7 +248,6 @@ EOF
     self.mox.ReplayAll()
     self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
     self.mox.VerifyAll()
-    pass
 
   def testTransferFilesExitsOnError(self):
     user = "root"
@@ -373,6 +373,51 @@ EOF
 
     self.mox.ReplayAll()
     self.assertRaises(SystemExit, self.module.main, self.test_argv)
+    self.mox.VerifyAll()
+
+  def _ExecCommandWithOutput(self, command, output):
+    stdout = _MockChannelFile(self.mox)
+    stdout._SetOutput(output)
+    self.client.exec_command(command).AndReturn((None, stdout, None))
+
+  def testVerifyKernelMatchesDetectsMatch(self):
+    self.mox.StubOutWithMock(self.module.os.path, "exists")
+    kernel = "2.6.32-5-xen-amd64"
+    self._ExecCommandWithOutput("uname -r", kernel)
+
+    moduledir = self.module.os.path.join(self.module.SOURCE_MOUNT, "lib",
+                                         "modules", kernel)
+    self.module.os.path.exists(moduledir).AndReturn(True)
+
+    self.mox.ReplayAll()
+    self.assertTrue(self.module.VerifyKernelMatches(self.client))
+    self.mox.VerifyAll()
+
+  def testVerifyKernelMatchesDetectsMismatch(self):
+    self.mox.StubOutWithMock(self.module.os.path, "exists")
+    kernel = "2.6.32-5-xen-amd64"
+    self._ExecCommandWithOutput("uname -r", kernel)
+
+    moduledir = self.module.os.path.join(self.module.SOURCE_MOUNT, "lib",
+                                         "modules", kernel)
+    self.module.os.path.exists(moduledir).AndReturn(False)
+
+    self.mox.ReplayAll()
+    self.assertFalse(self.module.VerifyKernelMatches(self.client))
+    self.mox.VerifyAll()
+
+  def testEstablishConnectionCreatesClient(self):
+    self.mox.StubOutWithMock(self.module.paramiko, 'SSHClient',
+                             use_mock_anything=True)
+    self.module.paramiko.SSHClient().AndReturn(self.client)
+    self.client.set_missing_host_key_policy(mox.IsA(paramiko.WarningPolicy))
+    self.client.load_system_host_keys()
+    self.client.connect(self.host, username=self.user, pkey=self.pkey,
+                        allow_agent=False, look_for_keys=False)
+
+    self.mox.ReplayAll()
+    res = self.module.EstablishConnection(self.user, self.host, self.pkey)
+    self.assertTrue(res is self.client)
     self.mox.VerifyAll()
 
 
