@@ -26,7 +26,12 @@ def FixFstab(fname_in="/target/etc/fstab", fname_out="/target/etc/fstab"):
   """Alter the fstab to refer to new filesystems.
 
   This function edits the fstab file found at fname_in, locating the filesystem
-  mounted on / and replacing the device with the string UUID=<new_uuid>.
+  mounted on / and replacing the device with the string UUID=<new_uuid>. Since
+  there may have been more partitions before the transfer, comment out any
+  lines that:
+  - are not the root or swap partition
+  - are not set as "noauto"
+  - AND refer to actual block devices.
 
   @type fname_in: string
   @param fname_in: The fstab file to read.
@@ -74,26 +79,32 @@ def FixFstab(fname_in="/target/etc/fstab", fname_out="/target/etc/fstab"):
         parts[0] = "UUID=%s" % uuids["xvda1"]
         parts[2] = fstypes["xvda1"]
         line = "\t".join(parts) + "\n"
-        new_fstab += line
       elif parts[2] == "swap":  # swap partition
         parts[0] = "UUID=%s" % uuids["xvda2"]
         line = "\t".join(parts) + "\n"
-        new_fstab += line
-      # We only have two "real" filesystems, so skip any other "real" ones. But
-      # there may be some special filesystems that we want to include, so
-      # append any lines that don't mount a real device file.
-      elif parts[0][0] != "/" and parts[0][0:5] != "UUID=":
-        new_fstab += line
-      # Don't discard noauto lines, they don't hurt anybody
-      elif "noauto" in parts[3].split(","):
-        new_fstab += line
-    else:
-      # Keep comments and whitespace
-      new_fstab += line
+      elif IsAutomountedBlockDevice(parts):
+        line = "# " + line
+    new_fstab += line
   fstab_file.close()
   fstab_file = open(fname_out, "w")
   fstab_file.write(new_fstab)
   fstab_file.close()
+
+def IsAutomountedBlockDevice(fstab_cols):
+  """Returns whether a fstab line specifies a block device that is automounted.
+
+  These lines will need to be commented out, unless they are for the / or swap
+  partitions, because they will prevent booting if they are missing.
+
+  @type fstab_cols: list
+  @param fstab_cols: List of the columns in this fstab line.
+
+  """
+  for prefix in ["/", "UUID=", "LABEL="]:
+    if fstab_cols[0].startswith(prefix):
+      if "noauto" not in fstab_cols[3].split(","):
+        return True
+  return False
 
 def main():
   FixFstab()
