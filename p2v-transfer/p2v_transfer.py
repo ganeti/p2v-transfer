@@ -164,8 +164,8 @@ def VerifyKernelMatches(client):
     return False
 
 
-def MountSourceFilesystems(fs_devs):
-  """Mounts the filesystems of the source (physical) machine in /source.
+def MountSourceFilesystems(root_dev, fstab_data=None):
+  """Mounts the filesystems of the source (physical) machine on /source.
 
   Reads /etc/fstab and mounts all of the real filesystems it can, so
   that the contents can be transferred to the target machine with one
@@ -173,14 +173,37 @@ def MountSourceFilesystems(fs_devs):
   make sure it's empty (though it really should be, since we're probably
   running off LiveCD/PXE)
 
-  @type fs_devs: dict
-  @param fs_devs: Dictionary mapping devices with normal filesystems to mount
-    points
+  @type root_dev: str
+  @param root_dev: Name of the device holding the root filesystem of the
+    source OS
+  @type fstab_data: str
+  @param fstab_data: Contents of an fstab file. If specified, will not try to
+    read /etc/fstab off of root FS.
+  @rtype: (list, list)
+  @return: List of (device, mount point) tuples, list of swap partitions
 
   """
   DisplayCommandStart("Mounting filesystems to copy...")
 
-  for dev, mount_point in fs_devs.items():
+  if not os.path.isdir(SOURCE_MOUNT):
+    os.mkdir(SOURCE_MOUNT)
+  errcode = subprocess.call(["mount", root_dev, SOURCE_MOUNT])
+  if errcode:
+    print "Error mounting %s" % root_dev
+    sys.exit(1)
+
+  # Now that the root device is mounted, we can read the fstab
+  try:
+    if not fstab_data:
+      fstab = open(os.path.join(SOURCE_MOUNT, "etc", "fstab"), "r")
+      fstab_data = fstab.read()
+      fstab.close()
+  except IOError, e:
+    raise P2VError("Error reading /etc/fstab to find filesystems: %s" % str(e))
+
+  fs_devs, swap_devs = ParseFstab(fstab_data)
+
+  for dev, mount_point in fs_devs:
     if mount_point == "/":
       continue
 
@@ -194,6 +217,7 @@ def MountSourceFilesystems(fs_devs):
       print "Could not mount %s on %s, continuing..." % (dev, mount_point)
 
   DisplayCommandEnd("done")
+  return fs_devs, swap_devs
 
 
 def ShutDownTarget(client):
@@ -300,42 +324,26 @@ def GetDiskSize(client, swap_devs):
                                                              swap_size))
   return total_megs, swap_size
 
-def ParseFstab(root_dev):
-  """Mount root FS, grab the useful information from the fstab.
+def ParseFstab(fstab_data):
+  """Grab the useful information from the fstab.
 
   Parses the fstab, and returns the information it contains, in two objects.
   One is a dictionary of the information needed to mount the real filesystems
   on the machine, and the other is a list of the names of the swap partitions.
 
-  @type root_dev: str
-  @param root_dev: Name of the device holding the root filesystem of the
-    source OS
-  @rtype: (dict, list)
-  @return: Dictionary mapping drives to mount points, list of swap partitions
+  @type fstab_data: str
+  @param fstab_data: Contents of an fstab file
+  @rtype: (list, list)
+  @return: List of (device, mount point) tuples, list of swap partitions
 
   """
   accepted_filesystems = ["ext2", "ext3", "ext4"]
   DisplayCommandStart("Interpreting /etc/fstab...")
 
-  if not os.path.isdir(SOURCE_MOUNT):
-    os.mkdir(SOURCE_MOUNT)
-  errcode = subprocess.call(["mount", root_dev, SOURCE_MOUNT])
-  if errcode:
-    print "Error mounting %s" % root_dev
-    sys.exit(1)
-
-  # Now that the root device is mounted, we can read the fstab
-  try:
-    fstab = open(os.path.join(SOURCE_MOUNT, "etc", "fstab"), "r")
-    fstab_lines = fstab.read().splitlines()
-    fstab.close()
-  except IOError, e:
-    raise P2VError("Error reading /etc/fstab to find filesystems: %s" % str(e))
-
-  fs_devs = {}
+  fs_devs = []
   swap_devs = []
 
-  for line in fstab_lines:
+  for line in fstab_data.splitlines():
     if not line or line[0] == "#":
       continue
     words = line.split()
@@ -343,13 +351,13 @@ def ParseFstab(root_dev):
       continue  # wrong format
 
     if words[2] in accepted_filesystems:
-      fs_devs[words[0]] = words[1]
+      fs_devs.append((words[0], words[1]))
     if words[2] == "swap":
       swap_devs.append(words[0])
 
-  fslist = ", ".join(fs_devs.keys())
+  fslist = ", ".join([ item[0] for item in fs_devs ])
   swaplist = ", ".join(swap_devs)
-  DisplayCommandEnd("Found filesystems on %s, swap on %s" % (fslist, swaplist))
+  DisplayCommandEnd("Found filesystems on %s; swap on %s" % (fslist, swaplist))
   return fs_devs, swap_devs
 
 
@@ -442,12 +450,11 @@ def UnmountSourceFilesystems(fs_devs):
   Unmounts all filesystems mounted by MountSourceFilesystems. Retries a couple
   of times in case the filesystem is busy the first time.
 
-  @type fs_devs: dict
-  @param fs_devs: Dictionary mapping devices with normal filesystems to mount
-    points
+  @type fs_devs: list
+  @param fs_devs: List of (device, mount point) tuples.
 
   """
-  for mount in reversed(fs_devs.values()):
+  for _, mount in reversed(fs_devs):
     if mount == "/":
       mount = SOURCE_MOUNT
     elif mount[0] == os.sep:
@@ -516,8 +523,7 @@ def main(argv):
 
       key = LoadSSHKey(keyfile)
       client = EstablishConnection(user, host, key)
-      fs_devs, swap_devs = ParseFstab(root_dev)
-      MountSourceFilesystems(fs_devs)
+      fs_devs, swap_devs = MountSourceFilesystems(root_dev)
       if options.skip_kernel_check or VerifyKernelMatches(client):
         total_megs, swap_megs = GetDiskSize(client, swap_devs)
         PartitionTargetDisks(client, total_megs, swap_megs)

@@ -70,8 +70,14 @@ class P2vtransferTest(unittest.TestCase):
     self.swapsize = 1024
     self.totsize = 102400
 
-    self.fs_devs = { self.root_dev: "/" }
+    self.fs_devs = [(self.root_dev, "/")]
     self.swap_devs = ["/dev/sda5"]
+
+    self.fstab_data = """
+UUID=00000000-0000-0000-0000-000000000000 / ext3 errors=remount-ro 0 1
+/dev/sda5 none swap sw 0 0
+UUID=55555555-5555-5555-5555-555555555555 /usr ext3 defaults 0 2
+"""
 
     self.opts = self.module.optparse.Values()
     self.opts.skip_kernel_check = False
@@ -137,7 +143,7 @@ class P2vtransferTest(unittest.TestCase):
     the returned values will be approximately self.totsize and self.swapsize.
     """
     popen = self.mox.CreateMock(self.module.subprocess.Popen)
-    self.mox.StubOutWithMock(self.module.subprocess, 'Popen',
+    self.mox.StubOutWithMock(self.module.subprocess, "Popen",
                              use_mock_anything=True)
 
     tot_bytes = self.totsize * 1024 * 1024
@@ -171,7 +177,7 @@ class P2vtransferTest(unittest.TestCase):
     self.totsize = self.swapsize * 5
 
     popen = self.mox.CreateMock(self.module.subprocess.Popen)
-    self.mox.StubOutWithMock(self.module.subprocess, 'Popen',
+    self.mox.StubOutWithMock(self.module.subprocess, "Popen",
                              use_mock_anything=True)
 
     tot_bytes = self.totsize * 1024 * 1024
@@ -218,7 +224,7 @@ EOF
     self.mox.VerifyAll()
 
   def testPartitionTargetDisksRetriesFormatOnError(self):
-    self.mox.StubOutWithMock(self.module, 'CleanUpTarget')
+    self.mox.StubOutWithMock(self.module, "CleanUpTarget")
 
     sfdisk_command = """sfdisk -uM /dev/xvda <<EOF
 0,%d,83
@@ -307,9 +313,8 @@ EOF
     self.module.EstablishConnection("root",
                                     self.host,
                                     self.pkey).AndReturn(self.client)
-    self.module.ParseFstab(self.root_dev).AndReturn((self.fs_devs,
-                                                     self.swap_devs))
-    self.module.MountSourceFilesystems(self.fs_devs)
+    call = self.module.MountSourceFilesystems(self.root_dev)
+    call.AndReturn((self.fs_devs, self.swap_devs))
     self.module.VerifyKernelMatches(self.client).AndReturn(True)
     self.module.GetDiskSize(self.client,
                             self.swap_devs).AndReturn((self.totsize,
@@ -358,9 +363,8 @@ EOF
     self.module.EstablishConnection("root",
                                     self.host,
                                     self.pkey).AndReturn(self.client)
-    self.module.ParseFstab(self.root_dev).AndReturn((self.fs_devs,
-                                                     self.swap_devs))
-    self.module.MountSourceFilesystems(self.fs_devs)
+    call = self.module.MountSourceFilesystems(self.root_dev)
+    call.AndReturn((self.fs_devs, self.swap_devs))
     self.module.VerifyKernelMatches(self.client).AndReturn(True)
     self.module.GetDiskSize(self.client,
                             self.swap_devs).AndReturn((self.totsize,
@@ -408,7 +412,7 @@ EOF
     self.mox.VerifyAll()
 
   def testEstablishConnectionCreatesClient(self):
-    self.mox.StubOutWithMock(self.module.paramiko, 'SSHClient',
+    self.mox.StubOutWithMock(self.module.paramiko, "SSHClient",
                              use_mock_anything=True)
     self.module.paramiko.SSHClient().AndReturn(self.client)
     self.client.set_missing_host_key_policy(mox.IsA(paramiko.WarningPolicy))
@@ -421,6 +425,59 @@ EOF
     self.assertTrue(res is self.client)
     self.mox.VerifyAll()
 
+  def testMountSourceFilesystemsMountsFilesystemsInOrder(self):
+    self.mox.StubOutWithMock(self.module.os.path, "isdir")
+    self.mox.StubOutWithMock(self.module.os, "mkdir")
+    self.mox.StubOutWithMock(self.module, "ParseFstab")
+
+    dev1 = "/dev/sda2"
+    dev2 = "/dev/sda5"
+    fs_devs1 = [("/dev/sda1", "/"), (dev1, "/usr"), (dev2, "/usr/local")]
+    fs_devs2 = [("/dev/sda1", "/"), (dev2, "/usr"), (dev1, "/usr/local")]
+
+    # First call:
+    # Mount root filesystem
+    self.module.os.path.isdir(self.module.SOURCE_MOUNT).AndReturn(False)
+    self.module.os.mkdir(self.module.SOURCE_MOUNT)
+    self._MockSubprocessCallSuccess(["mount", self.root_dev,
+                                     self.module.SOURCE_MOUNT])
+    # Parse
+    self.module.ParseFstab(self.fstab_data).AndReturn((fs_devs1,
+                                                       self.swap_devs))
+    # Mount
+    for devpair in fs_devs1[1:]:
+      self._MockSubprocessCallSuccess(["mount", devpair[0],
+                                       self.module.SOURCE_MOUNT + devpair[1]])
+
+    # Second call:
+    # Mount root filesystem
+    self.module.os.path.isdir(self.module.SOURCE_MOUNT).AndReturn(False)
+    self.module.os.mkdir(self.module.SOURCE_MOUNT)
+    self._MockSubprocessCallSuccess(["mount", self.root_dev,
+                                     self.module.SOURCE_MOUNT])
+    # Parse
+    self.module.ParseFstab(self.fstab_data).AndReturn((fs_devs2,
+                                                       self.swap_devs))
+    # Mount
+    for devpair in fs_devs2[1:]:
+      self._MockSubprocessCallSuccess(["mount", devpair[0],
+                                       self.module.SOURCE_MOUNT + devpair[1]])
+
+    self.mox.ReplayAll()
+    self.module.MountSourceFilesystems(self.root_dev,
+                                       fstab_data=self.fstab_data)
+    self.module.MountSourceFilesystems(self.root_dev,
+                                       fstab_data=self.fstab_data)
+    self.mox.VerifyAll()
+
+  def testParseFstabReturnsFilesystemsAndSwap(self):
+    fs_correct = [("UUID=00000000-0000-0000-0000-000000000000", "/"),
+                  ("UUID=55555555-5555-5555-5555-555555555555", "/usr")]
+
+    fs_devs, swap_devs = self.module.ParseFstab(self.fstab_data)
+
+    self.assertEqual(fs_devs, fs_correct)
+    self.assertEqual(swap_devs, self.swap_devs)
 
 if __name__ == "__main__":
   unittest.main()
