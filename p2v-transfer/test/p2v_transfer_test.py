@@ -70,6 +70,9 @@ class P2vtransferTest(unittest.TestCase):
     self.swapsize = 1024
     self.totsize = 102400
 
+    self.fs_devs = { self.root_dev: "/" }
+    self.swap_devs = ["/dev/sda5"]
+
     self.opts = self.module.optparse.Values()
     self.opts.skip_kernel_check = False
 
@@ -112,6 +115,7 @@ class P2vtransferTest(unittest.TestCase):
       "VerifyKernelMatches",
       "LoadSSHKey",
       "CleanUpTarget",
+      "ParseFstab",
       ]
     for func in self.module_functions:
       self.mox.StubOutWithMock(self.module, func)
@@ -137,28 +141,22 @@ class P2vtransferTest(unittest.TestCase):
                              use_mock_anything=True)
 
     tot_bytes = self.totsize * 1024 * 1024
-    swap_kb = self.swapsize * 1024
-
-    blockdev_output = str(tot_bytes)
-    swapon_output = """
-Filename			Type		Size	Used	Priority
-/dev/sda5                       partition	%d	0	-1
-""" % swap_kb
+    swap_bytes = self.swapsize * 1024 * 1024
 
     stdout = _MockChannelFile(self.mox)
-    stdout._SetOutput(blockdev_output)
+    stdout._SetOutput(str(tot_bytes))
 
     call = self.client.exec_command("blockdev --getsize64 /dev/xvda")
     call.AndReturn((None, stdout, None))
 
-    call = self.module.subprocess.Popen(["swapon", "-s"],
-                                        stdout=self.module.subprocess.PIPE,
-                                        stderr=self.module.subprocess.PIPE)
+    call = self.module.subprocess.Popen(["blockdev", "--getsize64",
+                                         self.swap_devs[0]],
+                                        stdout=self.module.subprocess.PIPE)
     call.AndReturn(popen)
-    popen.communicate().AndReturn((swapon_output, None))
+    popen.communicate().AndReturn((str(swap_bytes), None))
 
     self.mox.ReplayAll()
-    total, swap = self.module.GetDiskSize(self.client)
+    total, swap = self.module.GetDiskSize(self.client, self.swap_devs)
     self.assertEqual(total, self.totsize)
     # Should return same swap size as source machine
     self.assertEqual(swap, self.swapsize)
@@ -177,28 +175,22 @@ Filename			Type		Size	Used	Priority
                              use_mock_anything=True)
 
     tot_bytes = self.totsize * 1024 * 1024
-    swap_kb = self.swapsize * 1024
-
-    blockdev_output = str(tot_bytes)
-    swapon_output = """
-Filename			Type		Size	Used	Priority
-/dev/sda5                       partition	%d	0	-1
-""" % swap_kb
+    swap_bytes = self.swapsize * 1024 * 1024
 
     stdout = _MockChannelFile(self.mox)
-    stdout._SetOutput(blockdev_output)
+    stdout._SetOutput(str(tot_bytes))
 
     call = self.client.exec_command("blockdev --getsize64 /dev/xvda")
     call.AndReturn((None, stdout, None))
 
-    call = self.module.subprocess.Popen(["swapon", "-s"],
-                                        stdout=self.module.subprocess.PIPE,
-                                        stderr=self.module.subprocess.PIPE)
+    call = self.module.subprocess.Popen(["blockdev", "--getsize64",
+                                         self.swap_devs[0]],
+                                        stdout=self.module.subprocess.PIPE)
     call.AndReturn(popen)
-    popen.communicate().AndReturn((swapon_output, None))
+    popen.communicate().AndReturn((str(swap_bytes), None))
 
     self.mox.ReplayAll()
-    total, swap = self.module.GetDiskSize(self.client)
+    total, swap = self.module.GetDiskSize(self.client, self.swap_devs)
     self.assertEqual(total, self.totsize)
     # swap size should be about 10% of the total
     self.assertEqual(swap, self.totsize/10)
@@ -234,16 +226,17 @@ EOF
 EOF
 """ % (self.totsize - self.swapsize)
 
-    self._MockRunCommandAndWait(sfdisk_command)
 
     commands = ("mkfs.ext3 /dev/xvda1"
                 " && mkswap /dev/xvda2"
                 " && mkdir -p %s"
                 " && mount /dev/xvda1 %s") % (self.module.TARGET_MOUNT,
                                               self.module.TARGET_MOUNT)
-    self._MockRunCommandAndWait(commands, 1)  # maybe /target is mounted
-    self.module.CleanUpTarget(self.client)    # so, make sure it's unmounted
-    self._MockRunCommandAndWait(commands)     # and try again
+
+    self._MockRunCommandAndWait(sfdisk_command, 1)  # maybe /target is mounted
+    self.module.CleanUpTarget(self.client)  # so, make sure it's unmounted
+    self._MockRunCommandAndWait(sfdisk_command)
+    self._MockRunCommandAndWait(commands)  # and try both commands again
 
     self.mox.ReplayAll()
     self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
@@ -278,15 +271,15 @@ EOF
     self.mox.StubOutWithMock(self.module.os.path, "ismount")
     command_list = ["umount", self.module.SOURCE_MOUNT]
 
+    self.module.os.path.exists(self.module.SOURCE_MOUNT).AndReturn(True)
+    self.module.os.path.ismount(self.module.SOURCE_MOUNT).AndReturn(True)
     for trynum in range(3):
-      self.module.os.path.exists(self.module.SOURCE_MOUNT).AndReturn(True)
-      self.module.os.path.ismount(self.module.SOURCE_MOUNT).AndReturn(True)
-
       # Will retry twice before quitting
       self._MockSubprocessCallFailure(command_list)
 
     self.mox.ReplayAll()
-    self.assertRaises(SystemExit, self.module.UnmountSourceFilesystems)
+    self.assertRaises(SystemExit, self.module.UnmountSourceFilesystems,
+                      self.fs_devs)
     self.mox.VerifyAll()
 
   def testUnmountSourceFilesystemsCallsUmount(self):
@@ -298,7 +291,7 @@ EOF
     command_list = ["umount", self.module.SOURCE_MOUNT]
     self._MockSubprocessCallSuccess(command_list)
     self.mox.ReplayAll()
-    self.module.UnmountSourceFilesystems()
+    self.module.UnmountSourceFilesystems(self.fs_devs)
     self.mox.VerifyAll()
 
   def testMainRunsAllFunctions(self):
@@ -312,15 +305,18 @@ EOF
     self.module.EstablishConnection("root",
                                     self.host,
                                     self.pkey).AndReturn(self.client)
-    self.module.MountSourceFilesystems(self.root_dev)
+    self.module.ParseFstab(self.root_dev).AndReturn((self.fs_devs,
+                                                     self.swap_devs))
+    self.module.MountSourceFilesystems(self.fs_devs)
     self.module.VerifyKernelMatches(self.client).AndReturn(True)
-    self.module.GetDiskSize(self.client).AndReturn((self.totsize,
-                                                    self.swapsize))
+    self.module.GetDiskSize(self.client,
+                            self.swap_devs).AndReturn((self.totsize,
+                                                       self.swapsize))
     self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
     self.module.TransferFiles("root", self.host, self.pkeyfile)
     self.module.RunFixScripts(self.client)
     self.module.ShutDownTarget(self.client)
-    self.module.UnmountSourceFilesystems()
+    self.module.UnmountSourceFilesystems(self.fs_devs)
     self.module.CleanUpTarget(self.client)
 
     self.mox.ReplayAll()
@@ -360,15 +356,18 @@ EOF
     self.module.EstablishConnection("root",
                                     self.host,
                                     self.pkey).AndReturn(self.client)
-    self.module.MountSourceFilesystems(self.root_dev)
+    self.module.ParseFstab(self.root_dev).AndReturn((self.fs_devs,
+                                                     self.swap_devs))
+    self.module.MountSourceFilesystems(self.fs_devs)
     self.module.VerifyKernelMatches(self.client).AndReturn(True)
-    self.module.GetDiskSize(self.client).AndReturn((self.totsize,
-                                                    self.swapsize))
+    self.module.GetDiskSize(self.client,
+                            self.swap_devs).AndReturn((self.totsize,
+                                                       self.swapsize))
     call = self.module.PartitionTargetDisks(self.client, self.totsize,
                                             self.swapsize)
     call.AndRaise(self.module.P2VError("meep"))
     # Transfer is cancelled because of the error, but still we have:
-    self.module.UnmountSourceFilesystems()
+    self.module.UnmountSourceFilesystems(self.fs_devs)
     self.module.CleanUpTarget(self.client)
 
     self.mox.ReplayAll()

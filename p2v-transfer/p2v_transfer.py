@@ -164,29 +164,34 @@ def VerifyKernelMatches(client):
     return False
 
 
-def MountSourceFilesystems(root_dev):
+def MountSourceFilesystems(fs_devs):
   """Mounts the filesystems of the source (physical) machine in /source.
 
   Reads /etc/fstab and mounts all of the real filesystems it can, so
   that the contents can be transferred to the target machine with one
   rsync command.  Creates the /source dir if necessary, and checks to
-  make sure it"s empty (though it really should be, since we"re probably
+  make sure it's empty (though it really should be, since we're probably
   running off LiveCD/PXE)
 
-  @type root_dev: str
-  @param root_dev: Name of the device holding the root filesystem of the
-    source OS
+  @type fs_devs: dict
+  @param fs_devs: Dictionary mapping devices with normal filesystems to mount
+    points
 
   """
   DisplayCommandStart("Mounting filesystems to copy...")
 
-  if not os.path.isdir(SOURCE_MOUNT):
-    os.mkdir(SOURCE_MOUNT)
-  errcode = subprocess.call(["mount", root_dev, SOURCE_MOUNT])
-    # TODO(benlipton): mount other filesystems, if any
-  if errcode:
-    print "Error mounting %s" % root_dev
-    sys.exit(1)
+  for dev, mount_point in fs_devs.items():
+    if mount_point == "/":
+      continue
+
+    # Ok, we've decided to actually try mounting this filesystem
+    if mount_point[0] == os.sep:
+      mount_point = SOURCE_MOUNT + mount_point
+    else:
+      mount_point = SOURCE_MOUNT + os.sep + mount_point
+    errcode = subprocess.call(["mount", dev, mount_point])
+    if errcode:
+      print "Could not mount %s on %s, continuing..." % (dev, mount_point)
 
   DisplayCommandEnd("done")
 
@@ -251,7 +256,7 @@ def _WaitForCompletion(channel):
     print "The command has completed."
 
 
-def GetDiskSize(client):
+def GetDiskSize(client, swap_devs):
   """Determine how much disk is available, how much swap space to include.
 
   For swap size, returns the minimum of:
@@ -260,6 +265,8 @@ def GetDiskSize(client):
 
   @type client: paramiko.SSHClient
   @param client: SSH client object used to connect to the instance.
+  @type swap_devs: list
+  @param swap_devs: List of swap partitions on the source machine.
   @rtype: (int, int)
   @return: Total size in megabytes, swap size in megabytes
 
@@ -274,23 +281,76 @@ def GetDiskSize(client):
       break
   stdout.close()
 
-  swap_output = subprocess.Popen(["swapon", "-s"],
-                                 stdout=subprocess.PIPE,
-                                 stderr=subprocess.PIPE).communicate()[0]
   swap_megs = 0
-  for line in swap_output.splitlines()[1:]:
-    words = line.split()
+  for dev in swap_devs:
+    size_output = subprocess.Popen(["blockdev", "--getsize64", dev],
+                                   stdout=subprocess.PIPE).communicate()[0]
     try:
-      size_kb = int(words[2])
-      swap_megs += size_kb / 1024
+      swap_megs += int(size_output.strip()) / (1024 * 1024)
     except ValueError:
-      pass  # This line doesn't have data on it
+      pass  # Dev has gone missing, so just ignore it.
+
+  if swap_megs == 0:
+    raise P2VError("No swap devices found, so swap size could not be"
+                   " determined.")
 
   swap_size = min(swap_megs, int(total_megs * 0.1))
 
   DisplayCommandEnd("%d MB disk, %d MB reserved for swap" % (total_megs,
                                                              swap_size))
   return total_megs, swap_size
+
+def ParseFstab(root_dev):
+  """Mount root FS, grab the useful information from the fstab.
+
+  Parses the fstab, and returns the information it contains, in two objects.
+  One is a dictionary of the information needed to mount the real filesystems
+  on the machine, and the other is a list of the names of the swap partitions.
+
+  @type root_dev: str
+  @param root_dev: Name of the device holding the root filesystem of the
+    source OS
+  @rtype: (dict, list)
+  @return: Dictionary mapping drives to mount points, list of swap partitions
+
+  """
+  accepted_filesystems = ["ext2", "ext3", "ext4"]
+  DisplayCommandStart("Interpreting /etc/fstab...")
+
+  if not os.path.isdir(SOURCE_MOUNT):
+    os.mkdir(SOURCE_MOUNT)
+  errcode = subprocess.call(["mount", root_dev, SOURCE_MOUNT])
+  if errcode:
+    print "Error mounting %s" % root_dev
+    sys.exit(1)
+
+  # Now that the root device is mounted, we can read the fstab
+  try:
+    fstab = open(os.path.join(SOURCE_MOUNT, "etc", "fstab"), "r")
+    fstab_lines = fstab.read().splitlines()
+    fstab.close()
+  except IOError, e:
+    raise P2VError("Error reading /etc/fstab to find filesystems: %s" % str(e))
+
+  fs_devs = {}
+  swap_devs = []
+
+  for line in fstab_lines:
+    if not line or line[0] == "#":
+      continue
+    words = line.split()
+    if len(words) != 6:
+      continue  # wrong format
+
+    if words[2] in accepted_filesystems:
+      fs_devs[words[0]] = words[1]
+    if words[2] == "swap":
+      swap_devs.append(words[0])
+
+  fslist = ", ".join(fs_devs.keys())
+  swaplist = ", ".join(swap_devs)
+  DisplayCommandEnd("Found filesystems on %s, swap on %s" % (fslist, swaplist))
+  return fs_devs, swap_devs
 
 
 def PartitionTargetDisks(client, total_megs, swap_megs):
@@ -376,24 +436,36 @@ def RunFixScripts(client):
   DisplayCommandEnd("done")
 
 
-def UnmountSourceFilesystems():
+def UnmountSourceFilesystems(fs_devs):
   """Undo mounts performed by MountSourceFilesystems.
 
-  Unmounts all filesystems mounted by MountSourceFilesystems. Currently, since
-  only the root filesystem ever gets mounted, this only unmounts the root
-  filesystem. Retries a couple of times in case the filesystem is busy the
-  first time.
+  Unmounts all filesystems mounted by MountSourceFilesystems. Retries a couple
+  of times in case the filesystem is busy the first time.
+
+  @type fs_devs: dict
+  @param fs_devs: Dictionary mapping devices with normal filesystems to mount
+    points
 
   """
-  for trynum in range(3):
-    if not os.path.exists(SOURCE_MOUNT) or not os.path.ismount(SOURCE_MOUNT):
-      return
-    errcode = subprocess.call(["umount", SOURCE_MOUNT])
-    if not errcode:
-      return
-    time.sleep(0.5)
-  print "Error unmounting %s" % SOURCE_MOUNT
-  sys.exit(1)
+  for mount in reversed(fs_devs.values()):
+    if mount == "/":
+      mount = SOURCE_MOUNT
+    elif mount[0] == os.sep:
+      mount = SOURCE_MOUNT + mount
+    else:
+      mount = SOURCE_MOUNT + os.sep + mount
+
+    if os.path.exists(mount) and os.path.ismount(mount):
+      succeeded = False
+      for trynum in range(3):
+        errcode = subprocess.call(["umount", mount])
+        if not errcode:
+          succeeded = True
+          break
+        time.sleep(0.5)
+      if not succeeded:
+        print "Error unmounting %s" % mount
+        sys.exit(1)
 
 
 def CleanUpTarget(client):
@@ -430,6 +502,7 @@ def DisplayCommandEnd(message):
 def main(argv):
   client = None
   uid = None
+  fs_devs = {}
 
   try:
     try:
@@ -443,9 +516,10 @@ def main(argv):
 
       key = LoadSSHKey(keyfile)
       client = EstablishConnection(user, host, key)
-      MountSourceFilesystems(root_dev)
+      fs_devs, swap_devs = ParseFstab(root_dev)
+      MountSourceFilesystems(fs_devs)
       if options.skip_kernel_check or VerifyKernelMatches(client):
-        total_megs, swap_megs = GetDiskSize(client)
+        total_megs, swap_megs = GetDiskSize(client, swap_devs)
         PartitionTargetDisks(client, total_megs, swap_megs)
         TransferFiles(user, host, keyfile)
         RunFixScripts(client)
@@ -459,7 +533,7 @@ def main(argv):
       sys.exit(1)
   finally:
     if uid == 0:
-      UnmountSourceFilesystems()
+      UnmountSourceFilesystems(fs_devs)
     if client:
       CleanUpTarget(client)
 
