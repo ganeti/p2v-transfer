@@ -269,6 +269,7 @@ EOF
   def testUnmountSourceFilesystemsExitsOnError(self):
     self.mox.StubOutWithMock(self.module.os.path, "exists")
     self.mox.StubOutWithMock(self.module.os.path, "ismount")
+    self.mox.StubOutWithMock(self.module.time, "sleep")
     command_list = ["umount", self.module.SOURCE_MOUNT]
 
     self.module.os.path.exists(self.module.SOURCE_MOUNT).AndReturn(True)
@@ -276,6 +277,7 @@ EOF
     for trynum in range(3):
       # Will retry twice before quitting
       self._MockSubprocessCallFailure(command_list)
+      self.module.time.sleep(0.5)
 
     self.mox.ReplayAll()
     self.assertRaises(SystemExit, self.module.UnmountSourceFilesystems,
