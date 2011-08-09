@@ -44,33 +44,52 @@ def FixFstab(fname_in="/target/etc/fstab", fname_out="/target/etc/fstab"):
   # information to reconstruct the whole partitioning scheme.
   uuids = {}
   fstypes = {}
+  disk_name = "xvda"
   p = subprocess.Popen(["blkid"], stdout=subprocess.PIPE)
-  for line in p.communicate()[0].split('\n'):
-    parts = re.match("/dev/(xvda[0-9]): UUID=\"([-a-z0-9]+)\" TYPE=\"(.+)\"",
-                     line)
-    if parts:
-      partname, uuid, fstype = parts.groups()
-      uuids[partname] = uuid
-      fstypes[partname] = fstype
 
-  if "xvda1" not in uuids:
-    print uuids
-    raise fixlib.FixError("Could not determine UUID of root filesystem."
-                          " /etc/fstab may need to be edited by hand")
+  devregex = re.compile("/dev/(%s[0-9]):" % disk_name)
+  uuidregex = re.compile("UUID=\"([-a-z0-9]+)\"")
+  typeregex = re.compile("TYPE=\"(.+)\"")
+
+  for line in p.communicate()[0].splitlines():
+    devmatch = devregex.search(line)
+    uuidmatch = uuidregex.search(line)
+    typematch = typeregex.search(line)
+    if devmatch and uuidmatch and typematch:
+      partname = devmatch.group(1)
+      uuids[partname] = uuidmatch.group(1)
+      fstypes[partname] = typematch.group(1)
+
+  if "xvda1" not in uuids or "xvda2" not in uuids:
+    raise fixlib.FixError("Could not determine UUID of root and swap"
+                          " filesystems. Found filesystems were: %s\n"
+                          "/etc/fstab may need to be edited by hand." % uuids)
 
   fstab_file = open(fname_in, "r")
   new_fstab = ""
   for line in fstab_file:
     parts = line.split()
-    if len(parts) >= 2 and parts[0][0] != "#":
-      if parts[1] == "/":
+    if len(parts) >= 2 and parts[0][0] != "#":  # Line containing a filesystem
+      if parts[1] == "/":  # root partition
         parts[0] = "UUID=%s" % uuids["xvda1"]
         parts[2] = fstypes["xvda1"]
         line = "\t".join(parts) + "\n"
-      elif parts[2] == "swap":
+        new_fstab += line
+      elif parts[2] == "swap":  # swap partition
         parts[0] = "UUID=%s" % uuids["xvda2"]
         line = "\t".join(parts) + "\n"
-    new_fstab += line
+        new_fstab += line
+      # We only have two "real" filesystems, so skip any other "real" ones. But
+      # there may be some special filesystems that we want to include, so
+      # append any lines that don't mount a real device file.
+      elif parts[0][0] != "/" and parts[0][0:5] != "UUID=":
+        new_fstab += line
+      # Don't discard noauto lines, they don't hurt anybody
+      elif "noauto" in parts[3].split(","):
+        new_fstab += line
+    else:
+      # Keep comments and whitespace
+      new_fstab += line
   fstab_file.close()
   fstab_file = open(fname_out, "w")
   fstab_file.write(new_fstab)
