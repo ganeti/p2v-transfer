@@ -22,6 +22,7 @@ import re
 
 import fixlib
 
+
 def FixFstab(fname_in="/target/etc/fstab", fname_out="/target/etc/fstab"):
   """Alter the fstab to refer to new filesystems.
 
@@ -90,6 +91,7 @@ def FixFstab(fname_in="/target/etc/fstab", fname_out="/target/etc/fstab"):
   fstab_file.write(new_fstab)
   fstab_file.close()
 
+
 def IsAutomountedBlockDevice(fstab_cols):
   """Returns whether a fstab line specifies a block device that is automounted.
 
@@ -97,7 +99,7 @@ def IsAutomountedBlockDevice(fstab_cols):
   partitions, because they will prevent booting if they are missing.
 
   @type fstab_cols: list
-  @param fstab_cols: List of the columns in this fstab line.
+  @param fstab_cols: list of the columns in this fstab line
 
   """
   for prefix in ["/", "UUID=", "LABEL="]:
@@ -106,8 +108,10 @@ def IsAutomountedBlockDevice(fstab_cols):
         return True
   return False
 
+
 def main():
   FixFstab()
+
 
 if __name__ == "__main__":
   main()

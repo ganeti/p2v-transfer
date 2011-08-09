@@ -22,6 +22,7 @@
 
 Fixlib is a package for the actual code of the python fix scripts, so that they
 can be unit tested but also run with run-parts.
+
 """
 
 class FixError(Exception):

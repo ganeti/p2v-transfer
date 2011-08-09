@@ -28,6 +28,7 @@ import mox
 
 import make_ramboot_initrd as mkinitrd
 
+
 class MakeRambootInitrdTest(unittest.TestCase):
   SRCDIR = os.environ.get("SRCDIR", ".")
   MOVETORAM = os.path.join(SRCDIR, "test", "testdata", "movetoram")

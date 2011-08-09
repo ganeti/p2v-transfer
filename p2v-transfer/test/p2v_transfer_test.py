@@ -479,5 +479,6 @@ EOF
     self.assertEqual(fs_devs, fs_correct)
     self.assertEqual(swap_devs, self.swap_devs)
 
+
 if __name__ == "__main__":
   unittest.main()

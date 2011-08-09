@@ -324,6 +324,7 @@ def GetDiskSize(client, swap_devs):
                                                              swap_size))
   return total_megs, swap_size
 
+
 def ParseFstab(fstab_data):
   """Grab the useful information from the fstab.
 
