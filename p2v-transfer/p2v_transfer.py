@@ -202,14 +202,15 @@ def MountSourceFilesystems(root_dev, fstab_data=None):
   @return: List of (device, mount point) tuples, list of swap partitions
 
   """
-  DisplayCommandStart("Mounting filesystems to copy...")
 
+  DisplayCommandStart("Mounting root filesystem...")
   if not os.path.isdir(SOURCE_MOUNT):
     os.mkdir(SOURCE_MOUNT)
   errcode = subprocess.call(["mount", root_dev, SOURCE_MOUNT])
   if errcode:
     print "Error mounting %s" % root_dev
     sys.exit(1)
+  DisplayCommandEnd("done")
 
   # Now that the root device is mounted, we can read the fstab
   try:
@@ -221,6 +222,8 @@ def MountSourceFilesystems(root_dev, fstab_data=None):
     raise P2VError("Error reading /etc/fstab to find filesystems: %s" % str(e))
 
   fs_devs, swap_devs = ParseFstab(fstab_data)
+
+  DisplayCommandStart("Mounting filesystems to copy...")
 
   for dev, mount_point in fs_devs:
     if mount_point == "/":
@@ -299,6 +302,26 @@ def _WaitForCompletion(channel):
     print "The command has completed."
 
 
+def _GetDeviceFile(dev):
+  """Get the device file associated with a block device.
+
+  Accepts input of the form /dev/<device>, UUID=<uuid>, and LABEL=<label>, and
+  returns the /dev/<device> file for the disk.
+
+  @type dev: str
+  @param dev: specification of the block device
+
+  """
+  if dev.startswith("UUID=") or dev.startswith("LABEL="):
+    popen = subprocess.Popen(["findfs", dev], stdout=subprocess.PIPE)
+    devname = popen.communicate()[0].strip()
+    if popen.returncode == 0:
+      return devname
+    else:
+      raise P2VError("Swap device %s not found" % dev)
+  else:
+    return dev
+
 def GetDiskSize(client, swap_devs):
   """Determine how much disk is available, how much swap space to include.
 
@@ -326,6 +349,7 @@ def GetDiskSize(client, swap_devs):
 
   swap_megs = 0
   for dev in swap_devs:
+    dev = _GetDeviceFile(dev)
     size_output = subprocess.Popen(["blockdev", "--getsize64", dev],
                                    stdout=subprocess.PIPE).communicate()[0]
     try:
@@ -529,7 +553,7 @@ def DisplayCommandEnd(message):
 def main(argv):
   client = None
   uid = None
-  fs_devs = {}
+  fs_devs = []
 
   try:
     try:
