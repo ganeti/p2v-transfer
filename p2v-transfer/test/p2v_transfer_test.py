@@ -414,9 +414,14 @@ EOF
   def testEstablishConnectionCreatesClient(self):
     self.mox.StubOutWithMock(self.module.paramiko, "SSHClient",
                              use_mock_anything=True)
+    self.mox.StubOutWithMock(self.module.os.path, 'expanduser')
+
+    known_hosts = "/home/%s/.ssh/known_hosts" % self.user
+
     self.module.paramiko.SSHClient().AndReturn(self.client)
-    self.client.set_missing_host_key_policy(mox.IsA(paramiko.WarningPolicy))
-    self.client.load_system_host_keys()
+    self.module.os.path.expanduser("~/.ssh/known_hosts").AndReturn(known_hosts)
+    self.client.set_missing_host_key_policy(mox.IsA(self.module.AskAddPolicy))
+    self.client.load_host_keys(known_hosts)
     self.client.connect(self.host, username=self.user, pkey=self.pkey,
                         allow_agent=False, look_for_keys=False)
 

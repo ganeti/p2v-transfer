@@ -28,6 +28,7 @@ necessary to gain access to the bootstrap OS.
 """
 
 
+import binascii
 import re
 import stat
 import sys
@@ -45,6 +46,18 @@ SOURCE_MOUNT = "/source"
 class P2VError(Exception):
   """Generic error class for problems with the transfer."""
   pass
+
+
+class AskAddPolicy(paramiko.AutoAddPolicy):
+  """Policy that asks the user to confirm a key before adding it."""
+  def missing_host_key(self, client, hostname, key):
+    print "Target has ssh host key fingerprint ",
+    print binascii.hexlify(key.get_fingerprint())
+    response = raw_input("Is this correct? y/N: ")
+    if response.lower() == "y":
+      super(AskAddPolicy, self).missing_host_key(client, hostname, key)
+    else:
+      raise paramiko.SSHException("Incorrect host key for %s" % hostname)
 
 
 def ParseOptions(argv):
@@ -123,8 +136,14 @@ def EstablishConnection(user, host, key):
   DisplayCommandStart("Connecting to instance...")
 
   client = paramiko.SSHClient()
-  client.set_missing_host_key_policy(paramiko.WarningPolicy())
-  client.load_system_host_keys()
+  client.set_missing_host_key_policy(AskAddPolicy())
+  known_hosts_filename = os.path.expanduser("~/.ssh/known_hosts")
+  try:
+    # Load from the known_hosts file. Additional keys will be saved back there.
+    client.load_host_keys(known_hosts_filename)
+  except IOError:
+    pass
+
   try:
     client.connect(host, username=user, pkey=key,
                    allow_agent=False, look_for_keys=False)
