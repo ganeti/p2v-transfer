@@ -44,8 +44,9 @@ directly from source, then the only place it looks for OS definitions is
 ``/srv/ganeti/os``, and you need to install the OS under it. Distribute
 and install the package::
 
-  gnt-cluster copyfile ganeti-p2v-transfer-0.1.tar.gz
+  gnt-cluster copyfile /root/ganeti-p2v-transfer-0.1.tar.gz
   gnt-cluster command "tar xf ganeti-p2v-transfer-0.1.tar.gz &&
+    cd ganeti-p2v-transfer-0.1 &&
     ./configure --prefix=/usr --localstatedir=/var \
       --sysconfdir=/etc \
       --with-os-dir=/srv/ganeti/os &&
@@ -55,17 +56,18 @@ If ganeti was installed from a package, its default OS path should
 already include /usr/share/ganeti/os, so you can omit
 ``--with-os-dir``::
 
-  gnt-cluster copyfile ganeti-p2v-transfer-0.1.tar.gz
+  gnt-cluster copyfile /root/ganeti-p2v-transfer-0.1.tar.gz
   gnt-cluster command "tar xf ganeti-p2v-transfer-0.1.tar.gz &&
+    cd ganeti-p2v-transfer-0.1 &&
     ./configure --prefix=/usr --localstatedir=/var \
       --sysconfdir=/etc &&
     make install-target"
 
 
 Once the package is installed, edit the file
-``$PREFIX/etc/ganeti/instance-p2v-target/p2v-target.conf`` to uncomment
-the ``EXTRA_PKGS`` value that is appropriate to the hypervisor you are
-using on this cluster.
+``/etc/ganeti/instance-p2v-target/p2v-target.conf`` to uncomment the
+``EXTRA_PKGS`` value that is appropriate to the hypervisor you are using
+on this cluster.
 
 The actual path that ganeti will search for operating system definitions
 can be determined easily in ganeti 2.4.3 by running ``gnt-cluster info``
@@ -140,7 +142,7 @@ Creating a Target Instance
 Now that the nodes are set up to install instances with the bootstrap
 OS, we can go ahead and perform a P2V transfer. The first step is to
 create the instance that will receive the transfer. Create it with
-the ``p2v-target+default`` os and whatever parameters you need. The
+the ``p2v-target+default`` OS and whatever parameters you need. The
 default kernel and initrd of the instance should be ones that are both
 *compatible with* and *installed on* the source OS. Also pass the
 ``--no-start`` flag, because we want to use the specially generated
@@ -170,7 +172,7 @@ this to you.
 Boot the source machine from a LiveCD or PXE image. Extract the
 ganeti-p2v-transfer tarball and run::
 
-  ./configure -prefix=/usr --localstatedir=/var \
+  ./configure --prefix=/usr --localstatedir=/var \
     --sysconfdir=/etc
   sudo make install-source
 
@@ -194,6 +196,36 @@ Run the script, and your data will be transferred::
 When the transfer finishes, the script will shut down the instance. When
 the ganeti watcher restarts it, log in and make sure that everything
 works.
+
+
+Troubleshooting
+===============
+
+Bootstrap OS does not boot properly
+-----------------------------------
+
+These instructions suggest building the initrd on a node, for
+convenience.  However, it is possible that there are incompatibilities
+between the initramfs-tools installed on the node and the kernel that
+will be used for the bootstrap OS. In this case, the bootstrap OS may
+not boot, or may not be able to find the root device. If this happens, a
+good way to improve compatibility is to use a machine that is already
+running the instance kernel, perhaps a "normal" (non-p2v) instance on
+the same cluster. Install and run make_ramboot_initrd.py on this machine
+to generate the desired initrd.
+
+Another possibility is that the bootstrap OS does not have enough RAM to
+complete its boot. Since the bootstrap OS must be copied entirely into
+RAM, instances with small memory sizes are not supported. I have had
+good luck using 768MB of instance memory.
+
+No such script: ``/usr/share/debootstrap/scripts/squeeze``
+----------------------------------------------------------
+The version of debootstrap installed on the nodes may not be recent
+enough to support installing squeeze. Try changing the SUITE variable in
+``/etc/ganeti/instance-p2v-target/p2v-target.conf`` to something older::
+
+  SUITE="lenny"
 
 .. vim: set textwidth=72 :
 .. Local Variables:
