@@ -26,8 +26,8 @@ The following external programs are used by this package:
   needed to build the html documentation (`make doc`)
 
 
-For Administrators
-==================
+Installation
+============
 
 Installation of Bootstrap OS
 ----------------------------
@@ -63,12 +63,6 @@ already include /usr/share/ganeti/os, so you can omit
       --sysconfdir=/etc &&
     make install-target"
 
-
-Once the package is installed, edit the file
-``/etc/ganeti/instance-p2v-target/p2v-target.conf`` to uncomment the
-``EXTRA_PKGS`` value that is appropriate to the hypervisor you are using
-on this cluster.
-
 The actual path that ganeti will search for operating system definitions
 can be determined easily in ganeti 2.4.3 by running ``gnt-cluster info``
 and looking for the OS search path. In earlier versions, it can be found
@@ -80,7 +74,22 @@ ganeti will look for OS definitions. On of these should be passed to
 ``./configure`` as the value of ``--with-os-dir``.
 
 
-Note: Configuring the Bootstrap OS
+Configuring the Bootstrap OS
+----------------------------
+
+Once the package is installed, edit the file
+``/etc/ganeti/instance-p2v-target/p2v-target.conf`` to uncomment the
+``EXTRA_PKGS`` value that is appropriate to the hypervisor you are using
+on this cluster. Then distribute the updated file
+
+Edit ``/etc/ganeti/instance-p2v-target/p2v-target.conf`` to uncomment
+the appropriate value of EXTRA_PKGS. Depending on your setup, you may
+need to change other values as well. Then, copy the edited file to all
+nodes::
+
+  gnt-cluster copyfile /etc/ganeti/instance-p2v-target/p2v-target.conf
+
+Note on Bootstrap OS Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As the bootstrap OS is completely overwritten by the files transferred
@@ -136,8 +145,11 @@ Keep the private key (``/etc/ganeti/instance-p2v-target/id_dsa``)
 somewhere safe, and give it to users who wish to use the P2V system.
 
 
-Creating a Target Instance
---------------------------
+Workflow
+========
+
+Administrator: Creating Target Instance
+---------------------------------------
 
 Now that the nodes are set up to install instances with the bootstrap
 OS, we can go ahead and perform a P2V transfer. The first step is to
@@ -158,12 +170,8 @@ initrd::
   gnt-instance start -H kernel_path=/boot/vmlinuz-$DEB_KERNEL,\
   initrd_path=/boot/initrd.img-$DEB_KERNEL-ramboot <hostname>
 
-
-For Users
-=========
-
-Starting the Transfer
----------------------
+User: Starting the Transfer
+---------------------------
 
 Before you begin, you will need the private key corresponding to the
 public key installed on the instance. Your administrator will provide
