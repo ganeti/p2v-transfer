@@ -322,7 +322,8 @@ def _GetDeviceFile(dev):
   else:
     return dev
 
-def GetDiskSize(client, swap_devs):
+
+def GetDiskSize(client, swap_devs, target_hd):
   """Determine how much disk is available, how much swap space to include.
 
   For swap size, returns the minimum of:
@@ -333,6 +334,8 @@ def GetDiskSize(client, swap_devs):
   @param client: SSH client object used to connect to the instance.
   @type swap_devs: list
   @param swap_devs: List of swap partitions on the source machine.
+  @type target_hd: str
+  @param target_hd: Device file for the instance hard drive.
   @rtype: (int, int)
   @return: Total size in megabytes, swap size in megabytes
 
@@ -340,7 +343,8 @@ def GetDiskSize(client, swap_devs):
   DisplayCommandStart("Determining partition sizes...")
 
    # Find out how many MB are available on target
-  stdin, stdout, stderr = client.exec_command("blockdev --getsize64 /dev/xvda")
+  stdin, stdout, stderr = client.exec_command("blockdev --getsize64 %s" %
+                                              target_hd)
   for line in stdout:
     if line.strip():
       total_megs = int(line.strip()) / (1024 * 1024)
@@ -405,7 +409,7 @@ def ParseFstab(fstab_data):
   return fs_devs, swap_devs
 
 
-def PartitionTargetDisks(client, total_megs, swap_megs):
+def PartitionTargetDisks(client, total_megs, swap_megs, target_hd):
   """Partition and format the disks on the target machine.
 
   Sends commands over the SSH connection to partition and format the
@@ -417,22 +421,24 @@ def PartitionTargetDisks(client, total_megs, swap_megs):
   @param total_megs: Total size of disk, in megabytes
   @type swap_megs: int
   @param swap_megs: Desired size of swap space, in megabytes
+  @type target_hd: str
+  @param target_hd: Device file for the instance hard drive.
 
   """
   DisplayCommandStart("Partitioning disks...")
 
   nonswap_megs = total_megs - swap_megs
-  sfdisk_command = """sfdisk -uM /dev/xvda <<EOF
+  sfdisk_command = """sfdisk -uM %s <<EOF
 0,%d,83
 ,,82
 EOF
-""" % nonswap_megs
+""" % (target_hd, nonswap_megs)
 
   other_commands = [
-    "mkfs.ext3 /dev/xvda1",
-    "mkswap /dev/xvda2",
+    "mkfs.ext3 %s1" % target_hd,
+    "mkswap %s2" % target_hd,
     "mkdir -p %s" % TARGET_MOUNT,
-    "mount /dev/xvda1 %s" % TARGET_MOUNT,
+    "mount %s1 %s" % (target_hd, TARGET_MOUNT),
     ]
 
   try:
@@ -550,6 +556,24 @@ def DisplayCommandEnd(message):
   print message
 
 
+def FindTargetHardDrive(client):
+  """Find the name of the first hard drive on the target machine.
+
+  Tries, in order, /dev/{xvda,vda,sda} and returns the first one that exists on
+  the target machine.
+
+  @type client: paramiko.SSHClient
+  @param client: SSH client object used to connect to the instance.
+
+  """
+  for hd in ["/dev/xvda", "/dev/vda", "/dev/sda"]:
+    stdin, stdout, stderr = client.exec_command("test -b %s" % hd)
+    _WaitForCompletion(stdout.channel)
+    if stdout.channel.recv_exit_status() == 0:
+      return hd
+  raise P2VError("Could not locate a hard drive on the target.")
+
+
 def main(argv):
   client = None
   uid = None
@@ -568,9 +592,10 @@ def main(argv):
       key = LoadSSHKey(keyfile)
       client = EstablishConnection(user, host, key)
       fs_devs, swap_devs = MountSourceFilesystems(root_dev)
+      target_hd = FindTargetHardDrive(client)
       if options.skip_kernel_check or VerifyKernelMatches(client):
-        total_megs, swap_megs = GetDiskSize(client, swap_devs)
-        PartitionTargetDisks(client, total_megs, swap_megs)
+        total_megs, swap_megs = GetDiskSize(client, swap_devs, target_hd)
+        PartitionTargetDisks(client, total_megs, swap_megs, target_hd)
         TransferFiles(user, host, keyfile)
         RunFixScripts(client)
         ShutDownTarget(client)
@@ -578,7 +603,7 @@ def main(argv):
         raise P2VError("Modules matching instance kernel not present on source"
                        " OS. If your kernel does not use modules, you may want"
                        " the --skip-kernel-check option.")
-    except Exception, e:  # Make sure any error gets printed out
+    except P2VError, e:  # Print error message
       print e
       sys.exit(1)
   finally:

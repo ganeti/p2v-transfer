@@ -57,6 +57,7 @@ class P2vtransferTest(unittest.TestCase):
     self.module = p2v_transfer
 
     self.root_dev = "/dev/sda1"
+    self.target_hd = "/dev/xvda"
     self.host = "testmachine"
     self.pkeyfile = "/home/testuser/.ssh/id_dsa"
     self.pkey = "thepkey"
@@ -122,6 +123,7 @@ UUID=55555555-5555-5555-5555-555555555555 /usr ext3 defaults 0 2
       "LoadSSHKey",
       "CleanUpTarget",
       "ParseFstab",
+      "FindTargetHardDrive",
       ]
     for func in self.module_functions:
       self.mox.StubOutWithMock(self.module, func)
@@ -162,7 +164,8 @@ UUID=55555555-5555-5555-5555-555555555555 /usr ext3 defaults 0 2
     popen.communicate().AndReturn((str(swap_bytes), None))
 
     self.mox.ReplayAll()
-    total, swap = self.module.GetDiskSize(self.client, self.swap_devs)
+    total, swap = self.module.GetDiskSize(self.client, self.swap_devs,
+                                          self.target_hd)
     self.assertEqual(total, self.totsize)
     # Should return same swap size as source machine
     self.assertEqual(swap, self.swapsize)
@@ -196,7 +199,8 @@ UUID=55555555-5555-5555-5555-555555555555 /usr ext3 defaults 0 2
     popen.communicate().AndReturn((str(swap_bytes), None))
 
     self.mox.ReplayAll()
-    total, swap = self.module.GetDiskSize(self.client, self.swap_devs)
+    total, swap = self.module.GetDiskSize(self.client, self.swap_devs,
+                                          self.target_hd)
     self.assertEqual(total, self.totsize)
     # swap size should be about 10% of the total
     self.assertEqual(swap, self.totsize/10)
@@ -220,7 +224,30 @@ EOF
     self._MockRunCommandAndWait(commands)
 
     self.mox.ReplayAll()
-    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
+    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize,
+                                     self.target_hd)
+    self.mox.VerifyAll()
+
+  def testPartitionTargetDisksUsesKVMDevice(self):
+    self.target_hd = "/dev/vda"
+    sfdisk_command = """sfdisk -uM /dev/vda <<EOF
+0,%d,83
+,,82
+EOF
+""" % (self.totsize - self.swapsize)
+
+    self._MockRunCommandAndWait(sfdisk_command)
+
+    commands = ("mkfs.ext3 /dev/vda1"
+                " && mkswap /dev/vda2"
+                " && mkdir -p %s"
+                " && mount /dev/vda1 %s") % (self.module.TARGET_MOUNT,
+                                              self.module.TARGET_MOUNT)
+    self._MockRunCommandAndWait(commands)
+
+    self.mox.ReplayAll()
+    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize,
+                                     self.target_hd)
     self.mox.VerifyAll()
 
   def testPartitionTargetDisksRetriesFormatOnError(self):
@@ -245,7 +272,8 @@ EOF
     self._MockRunCommandAndWait(commands)  # and try both commands again
 
     self.mox.ReplayAll()
-    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
+    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize,
+                                     self.target_hd)
     self.mox.VerifyAll()
 
   def testTransferFilesExitsOnError(self):
@@ -315,11 +343,13 @@ EOF
                                     self.pkey).AndReturn(self.client)
     call = self.module.MountSourceFilesystems(self.root_dev)
     call.AndReturn((self.fs_devs, self.swap_devs))
+    self.module.FindTargetHardDrive(self.client).AndReturn(self.target_hd)
     self.module.VerifyKernelMatches(self.client).AndReturn(True)
-    self.module.GetDiskSize(self.client,
-                            self.swap_devs).AndReturn((self.totsize,
+    self.module.GetDiskSize(self.client, self.swap_devs,
+                            self.target_hd).AndReturn((self.totsize,
                                                        self.swapsize))
-    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize)
+    self.module.PartitionTargetDisks(self.client, self.totsize, self.swapsize,
+                                     self.target_hd)
     self.module.TransferFiles("root", self.host, self.pkeyfile)
     self.module.RunFixScripts(self.client)
     self.module.ShutDownTarget(self.client)
@@ -365,12 +395,13 @@ EOF
                                     self.pkey).AndReturn(self.client)
     call = self.module.MountSourceFilesystems(self.root_dev)
     call.AndReturn((self.fs_devs, self.swap_devs))
+    self.module.FindTargetHardDrive(self.client).AndReturn(self.target_hd)
     self.module.VerifyKernelMatches(self.client).AndReturn(True)
-    self.module.GetDiskSize(self.client,
-                            self.swap_devs).AndReturn((self.totsize,
+    self.module.GetDiskSize(self.client, self.swap_devs,
+                            self.target_hd).AndReturn((self.totsize,
                                                        self.swapsize))
     call = self.module.PartitionTargetDisks(self.client, self.totsize,
-                                            self.swapsize)
+                                            self.swapsize, self.target_hd)
     call.AndRaise(self.module.P2VError("meep"))
     # Transfer is cancelled because of the error, but still we have:
     self.module.UnmountSourceFilesystems(self.fs_devs)
