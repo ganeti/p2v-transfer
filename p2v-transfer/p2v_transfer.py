@@ -29,6 +29,7 @@ necessary to gain access to the bootstrap OS.
 
 
 import binascii
+import errno
 import re
 import stat
 import sys
@@ -142,7 +143,15 @@ def EstablishConnection(user, host, key):
     # Load from the known_hosts file. Additional keys will be saved back there.
     client.load_host_keys(known_hosts_filename)
   except IOError:
-    pass
+    # Error is ok, file will be created as long as parent directory exists.
+    # So, make sure it exists:
+    try:
+      os.mkdir(os.path.dirname(known_hosts_filename))
+    except OSError, e:
+      if e.errno != errno.EEXIST:  # already exists
+        raise P2VError("Unexpected error editing known_hosts file: %s. Please"
+                       " make sure that %s exists and is"
+                       " writable" % (e, known_hosts_filename))
 
   try:
     client.connect(host, username=user, pkey=key,
