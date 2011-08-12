@@ -610,6 +610,8 @@ def main(argv):
         TransferFiles(user, host, keyfile)
         RunFixScripts(client)
         ShutDownTarget(client)
+        # If this succeeds, the client won't be useful anymore
+        client = None
       else:
         raise P2VError("Modules matching instance kernel not present on source"
                        " OS. If your kernel does not use modules, you may want"
