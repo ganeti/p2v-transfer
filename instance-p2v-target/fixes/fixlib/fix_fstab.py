@@ -40,20 +40,20 @@ def FixFstab(fname_in="/target/etc/fstab", fname_out="/target/etc/fstab"):
   @param fname_out: Where to write the modified file.
 
   """
-  # TODO(benlipton): This is totally xen-specific. Better would be to use the
-  # first that exists of /dev/{xvda,vda,sda}.
-
-  # Note: This also assumes a particular partition layout (root partition on
+  # Note: This assumes a particular partition layout (root partition on
   # /dev/${device}1, swap partition on /dev/${device}2). This is only a problem
   # if we allow configurable partition layouts, so we'll let it stand for now,
   # but for the future, the bootstrap OS's /etc/mtab probably contains enough
   # information to reconstruct the whole partitioning scheme.
   uuids = {}
   fstypes = {}
-  disk_name = "xvda"
+  disk_name = fixlib.FindTargetHardDrive()
+  root_dev = "%s1" % disk_name
+  swap_dev = "%s2" % disk_name
+
   p = subprocess.Popen(["blkid"], stdout=subprocess.PIPE)
 
-  devregex = re.compile("/dev/(%s[0-9]):" % disk_name)
+  devregex = re.compile("^(%s[0-9]):" % disk_name)
   uuidregex = re.compile("UUID=\"([-a-z0-9]+)\"")
   typeregex = re.compile("TYPE=\"(.+)\"")
 
@@ -66,7 +66,7 @@ def FixFstab(fname_in="/target/etc/fstab", fname_out="/target/etc/fstab"):
       uuids[partname] = uuidmatch.group(1)
       fstypes[partname] = typematch.group(1)
 
-  if "xvda1" not in uuids or "xvda2" not in uuids:
+  if root_dev not in uuids or swap_dev not in uuids:
     raise fixlib.FixError("Could not determine UUID of root and swap"
                           " filesystems. Found filesystems were: %s\n"
                           "/etc/fstab may need to be edited by hand." % uuids)
@@ -77,11 +77,11 @@ def FixFstab(fname_in="/target/etc/fstab", fname_out="/target/etc/fstab"):
     parts = line.split()
     if len(parts) >= 2 and parts[0][0] != "#":  # Line containing a filesystem
       if parts[1] == "/":  # root partition
-        parts[0] = "UUID=%s" % uuids["xvda1"]
-        parts[2] = fstypes["xvda1"]
+        parts[0] = "UUID=%s" % uuids[root_dev]
+        parts[2] = fstypes[root_dev]
         line = "\t".join(parts) + "\n"
       elif parts[2] == "swap":  # swap partition
-        parts[0] = "UUID=%s" % uuids["xvda2"]
+        parts[0] = "UUID=%s" % uuids[swap_dev]
         line = "\t".join(parts) + "\n"
       elif IsAutomountedBlockDevice(parts):
         line = "# " + line

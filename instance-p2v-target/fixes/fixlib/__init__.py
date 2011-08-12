@@ -25,5 +25,25 @@ can be unit tested but also run with run-parts.
 
 """
 
+import subprocess
+
+
 class FixError(Exception):
   pass
+
+
+def FindTargetHardDrive():
+  """Find the name of the first hard drive on the target machine.
+
+  Tries, in order, /dev/{xvda,vda,sda} and returns the first one that exists on
+  the target machine.
+
+  @rtype: str
+  @return: name of the hard drive device to install onto
+
+  """
+  for hd in ["/dev/xvda", "/dev/vda", "/dev/sda"]:
+    status = subprocess.call(["test", "-b", hd])
+    if status == 0:
+      return hd
+  raise FixError("Could not locate a hard drive.")

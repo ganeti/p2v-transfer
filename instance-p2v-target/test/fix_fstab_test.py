@@ -8,6 +8,7 @@
 import mox
 import os
 import tempfile
+import types
 import unittest
 
 from fixlib import fix_fstab
@@ -19,17 +20,31 @@ class FixFstabTest(unittest.TestCase):
 
   def setUp(self):
     self.mox = mox.Mox()
+    self.module = fix_fstab
 
   def tearDown(self):
     self.mox.UnsetStubs()
     self.mox.ResetAll()
 
+  def _MockSubprocessCallSuccess(self, command_list):
+    if type(self.module.subprocess.call) == types.FunctionType:
+      self.mox.StubOutWithMock(self.module.subprocess, "call")
+    self.module.subprocess.call(command_list).AndReturn(0)
+
+  def _MockSubprocessCallFailure(self, command_list):
+    if type(self.module.subprocess.call) == types.FunctionType:
+      self.mox.StubOutWithMock(self.module.subprocess, "call")
+    self.module.subprocess.call(command_list).AndReturn(1)
+
   def testFixFstabReplacesRootLine(self):
     # stub out blkid call
     mock_popen = self.mox.CreateMock(fix_fstab.subprocess.Popen)
 
+    self.mox.StubOutWithMock(fix_fstab.fixlib, "FindTargetHardDrive")
     self.mox.StubOutWithMock(fix_fstab.subprocess, "Popen",
                              use_mock_anything=True)
+
+    fix_fstab.fixlib.FindTargetHardDrive().AndReturn("/dev/xvda")
     call = fix_fstab.subprocess.Popen(["blkid"],
                                        stdout=fix_fstab.subprocess.PIPE)
     call.AndReturn(mock_popen)
@@ -62,8 +77,11 @@ class FixFstabTest(unittest.TestCase):
     # stub out blkid call
     mock_popen = self.mox.CreateMock(fix_fstab.subprocess.Popen)
 
+    self.mox.StubOutWithMock(fix_fstab.fixlib, "FindTargetHardDrive")
     self.mox.StubOutWithMock(fix_fstab.subprocess, "Popen",
                              use_mock_anything=True)
+
+    fix_fstab.fixlib.FindTargetHardDrive().AndReturn("/dev/xvda")
     call = fix_fstab.subprocess.Popen(["blkid"],
                                        stdout=fix_fstab.subprocess.PIPE)
     call.AndReturn(mock_popen)
@@ -82,6 +100,18 @@ class FixFstabTest(unittest.TestCase):
       self.mox.VerifyAll()
     finally:
       os.remove(fname_out)
+
+
+  def testFindTargetHardDriveReturnsFirstAvailableDrive(self):
+    self._MockSubprocessCallFailure(["test", "-b", "/dev/xvda"])
+    self._MockSubprocessCallSuccess(["test", "-b", "/dev/vda"])
+
+    self.mox.ReplayAll()
+
+    dev = fix_fstab.fixlib.FindTargetHardDrive()
+    self.assertEqual("/dev/vda", dev)
+
+    self.mox.VerifyAll()
 
 
 if __name__ == '__main__':

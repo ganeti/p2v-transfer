@@ -563,7 +563,9 @@ def FindTargetHardDrive(client):
   the target machine.
 
   @type client: paramiko.SSHClient
-  @param client: SSH client object used to connect to the instance.
+  @param client: SSH client object used to connect to the instance
+  @rtype: str
+  @return: name of the hard drive device to install onto
 
   """
   for hd in ["/dev/xvda", "/dev/vda", "/dev/sda"]:
