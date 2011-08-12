@@ -138,7 +138,7 @@ def EstablishConnection(user, host, key):
 
   client = paramiko.SSHClient()
   client.set_missing_host_key_policy(AskAddPolicy())
-  known_hosts_filename = os.path.expanduser("~/.ssh/known_hosts")
+  known_hosts_filename = os.path.expanduser("~root/.ssh/known_hosts")
   try:
     # Load from the known_hosts file. Additional keys will be saved back there.
     client.load_host_keys(known_hosts_filename)
