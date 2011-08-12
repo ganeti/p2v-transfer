@@ -354,7 +354,7 @@ EOF
     self.module.RunFixScripts(self.client)
     self.module.ShutDownTarget(self.client)
     self.module.UnmountSourceFilesystems(self.fs_devs)
-    self.module.CleanUpTarget(self.client)
+    # Don't call CleanUpTarget, the target is shut down
 
     self.mox.ReplayAll()
     self.module.main(self.test_argv)
@@ -447,10 +447,11 @@ EOF
                              use_mock_anything=True)
     self.mox.StubOutWithMock(self.module.os.path, 'expanduser')
 
-    known_hosts = "/home/%s/.ssh/known_hosts" % self.user
+    known_hosts = "/root/.ssh/known_hosts"
 
     self.module.paramiko.SSHClient().AndReturn(self.client)
-    self.module.os.path.expanduser("~/.ssh/known_hosts").AndReturn(known_hosts)
+    call = self.module.os.path.expanduser("~root/.ssh/known_hosts")
+    call.AndReturn(known_hosts)
     self.client.set_missing_host_key_policy(mox.IsA(self.module.AskAddPolicy))
     self.client.load_host_keys(known_hosts)
     self.client.connect(self.host, username=self.user, pkey=self.pkey,
